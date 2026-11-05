@@ -1,0 +1,36 @@
+{
+  "name": "nxtwave-prep",
+  "private": true,
+  "description": "NxtWave personalized AI-powered technical learning & interview preparation platform",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @app/api --filter @app/student --filter @app/admin dev",
+    "dev:api": "pnpm --filter @app/api dev",
+    "dev:worker": "pnpm --filter @app/api dev:worker",
+    "dev:student": "pnpm --filter @app/student dev",
+    "dev:admin": "pnpm --filter @app/admin dev",
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down",
+    "db:migrate": "pnpm --filter @app/api db:migrate",
+    "db:deploy": "pnpm --filter @app/api db:deploy",
+    "db:generate": "pnpm --filter @app/api db:generate",
+    "db:seed": "pnpm --filter @app/api db:seed",
+    "db:studio": "pnpm --filter @app/api db:studio",
+    "admin:create": "pnpm --filter @app/api admin:create",
+    "db:bootstrap": "pnpm --filter @app/api db:bootstrap",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "typescript": "5.9.3"
+  }
+}

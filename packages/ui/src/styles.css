@@ -1,0 +1,228 @@
+/*
+ * Design tokens shared by the student and admin apps (docs/08-ux-strategy.md §2).
+ * Visual language follows the NxtWave prototype: NxtWave blue as the single accent,
+ * Geist for UI text, JetBrains Mono for display headings, numbers and code.
+ */
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-deep: var(--brand-deep);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-bad: var(--bad);
+  --color-bad-bg: var(--bad-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-g0: var(--g0);
+  --color-g1: var(--g1);
+  --color-g2: var(--g2);
+  --color-g3: var(--g3);
+  --color-g4: var(--g4);
+
+  --font-sans:
+    'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-display: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-card: 14px;
+  --shadow-soft: 0 1px 2px rgb(11 21 38 / 0.05), 0 8px 24px -8px rgb(11 21 38 / 0.1);
+  --shadow-lift: 0 2px 4px rgb(11 21 38 / 0.04), 0 24px 48px -16px rgb(11 21 38 / 0.18);
+}
+
+:root {
+  color-scheme: light;
+  --bg: #f7f8fb;
+  --surface: #ffffff;
+  --surface-2: #f1f4f9;
+  --surface-3: #e9eef6;
+  --ink: #0b1526;
+  --ink-2: #3b4a62;
+  --muted: #6a778e;
+  --line: #e2e7ef;
+  --line-2: #ccd5e2;
+  --brand: #1f5bff;
+  --brand-ink: #ffffff;
+  --brand-soft: #ecf1ff;
+  --brand-deep: #0d3cc2;
+  --ok: #0e7a55;
+  --ok-bg: #e3f6ee;
+  --bad: #bf2f3f;
+  --bad-bg: #fde7ea;
+  --warn: #9a5b00;
+  --warn-bg: #fff1d9;
+  --dot: #d9dfea;
+  --g0: #1f5bff;
+  --g1: #e8833a;
+  --g2: #14a37f;
+  --g3: #9b5de5;
+  --g4: #d6457a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #0a101c;
+    --surface: #111a2b;
+    --surface-2: #172238;
+    --surface-3: #1e2b45;
+    --ink: #e8edf7;
+    --ink-2: #b4c0d4;
+    --muted: #8593ab;
+    --line: #24314b;
+    --line-2: #33425f;
+    --brand: #6690ff;
+    --brand-ink: #0a1222;
+    --brand-soft: #18264a;
+    --brand-deep: #b0c6ff;
+    --ok: #4cd39a;
+    --ok-bg: #12332a;
+    --bad: #ff7c8c;
+    --bad-bg: #3c1821;
+    --warn: #f4b14e;
+    --warn-bg: #3a2a10;
+    --dot: #1c2740;
+    --g0: #6e97ff;
+    --g1: #f29a55;
+    --g2: #3cc9a2;
+    --g3: #b48bf0;
+    --g4: #ee6f9c;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0a101c;
+  --surface: #111a2b;
+  --surface-2: #172238;
+  --surface-3: #1e2b45;
+  --ink: #e8edf7;
+  --ink-2: #b4c0d4;
+  --muted: #8593ab;
+  --line: #24314b;
+  --line-2: #33425f;
+  --brand: #6690ff;
+  --brand-ink: #0a1222;
+  --brand-soft: #18264a;
+  --brand-deep: #b0c6ff;
+  --ok: #4cd39a;
+  --ok-bg: #12332a;
+  --bad: #ff7c8c;
+  --bad-bg: #3c1821;
+  --warn: #f4b14e;
+  --warn-bg: #3a2a10;
+  --dot: #1c2740;
+  --g0: #6e97ff;
+  --g1: #f29a55;
+  --g2: #3cc9a2;
+  --g3: #b48bf0;
+  --g4: #ee6f9c;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+    font-weight: 700;
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  ::selection {
+    background: var(--brand-soft);
+    color: var(--brand-deep);
+  }
+}
+
+@utility dotgrid {
+  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-rise {
+  animation: rise-in 0.35s ease-out both;
+}
+
+/* Story cards slide in from the side they were swiped towards. */
+@keyframes swipe-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(32px) rotate(1.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes swipe-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-32px) rotate(-1.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Accessibility override: respect the OS "reduce motion" setting over any component animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: must beat component-level animation rules */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: must beat component-level transition rules */
+    transition-duration: 0.01ms !important;
+  }
+}

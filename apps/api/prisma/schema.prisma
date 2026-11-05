@@ -1,0 +1,1131 @@
+// Source of truth for the database. Design notes: docs/03-database-design.md
+// Conventions: UUIDv7 keys, snake_case tables/columns, timestamptz, audit fields on admin-managed rows.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Identity [Phase 1] ─────────────────────────────
+
+enum UserRole {
+  STUDENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+  DELETED
+}
+
+enum SessionAudience {
+  STUDENT
+  ADMIN
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  ADMIN_INVITE
+}
+
+model User {
+  id              String     @id @default(uuid(7)) @db.Uuid
+  /// Always stored lower-cased and trimmed.
+  email           String     @unique
+  passwordHash    String?    @map("password_hash")
+  role            UserRole
+  status          UserStatus @default(ACTIVE)
+  emailVerifiedAt DateTime?  @map("email_verified_at") @db.Timestamptz(3)
+  lastLoginAt     DateTime?  @map("last_login_at") @db.Timestamptz(3)
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  studentProfile StudentProfile?
+  adminProfile   AdminProfile?           @relation("AdminProfileUser")
+  invitedAdmins  AdminProfile[]          @relation("AdminInvitedBy")
+  sessions       Session[]
+  authTokens     AuthToken[]
+  auditLogs      AuditLog[]
+  allowlistAdded EnrollmentAllowlist[]
+  goals          StudentGoal[]
+  identities     UserIdentity[]
+  roadmaps       Roadmap[]
+  skillRatings   StudentSkillRating[]
+  cohorts        CohortMember[]
+  interests      InterestSignal[]
+  lessonProgress ModuleProgress[]
+  checkAttempts  KnowledgeCheckAttempt[]
+  feedback       Feedback[]
+
+  @@index([role, status])
+  @@map("app_user")
+}
+
+model StudentProfile {
+  userId                String    @id @map("user_id") @db.Uuid
+  fullName              String    @map("full_name")
+  timezone              String    @default("Asia/Kolkata")
+  onboardingStep        Int       @default(0) @map("onboarding_step")
+  /// In-progress onboarding choices (validated by the OnboardingDraft contract) so a refresh resumes.
+  onboardingDraft       Json?     @map("onboarding_draft")
+  onboardingCompletedAt DateTime? @map("onboarding_completed_at") @db.Timestamptz(3)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("student_profile")
+}
+
+model AdminProfile {
+  userId      String   @id @map("user_id") @db.Uuid
+  fullName    String?  @map("full_name")
+  invitedById String?  @map("invited_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user      User  @relation("AdminProfileUser", fields: [userId], references: [id], onDelete: Cascade)
+  invitedBy User? @relation("AdminInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@map("admin_profile")
+}
+
+/// Opaque-token sessions. The id is SHA-256(token); the raw token only ever lives in the cookie.
+model Session {
+  id            String          @id
+  userId        String          @map("user_id") @db.Uuid
+  audience      SessionAudience
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt     DateTime        @map("expires_at") @db.Timestamptz(3)
+  /// Admin sessions only: idle timeout, pushed forward on activity.
+  idleExpiresAt DateTime?       @map("idle_expires_at") @db.Timestamptz(3)
+  lastSeenAt    DateTime        @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  revokedAt     DateTime?       @map("revoked_at") @db.Timestamptz(3)
+  ip            String?
+  userAgent     String?         @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("session")
+}
+
+/// Single-use tokens for email verification, password reset and admin invites (stored hashed).
+model AuthToken {
+  id        String        @id @default(uuid(7)) @db.Uuid
+  userId    String        @map("user_id") @db.Uuid
+  type      AuthTokenType
+  tokenHash String        @unique @map("token_hash")
+  expiresAt DateTime      @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime?     @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("auth_token")
+}
+
+/// Emails or whole domains allowed to register when the registration policy is ALLOWLIST.
+model EnrollmentAllowlist {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  email     String?   @unique
+  domain    String?   @unique
+  note      String?
+  /// Students who register through this entry join this cohort automatically.
+  cohortId  String?   @map("cohort_id") @db.Uuid
+  addedById String?   @map("added_by_id") @db.Uuid
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  addedBy User?   @relation(fields: [addedById], references: [id], onDelete: SetNull)
+  cohort  Cohort? @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+
+  @@map("enrollment_allowlist")
+}
+
+// ───────────────────────────── Platform [Phase 1] ─────────────────────────────
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  before     Json?
+  after      Json?
+  ip         String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+model PlatformSetting {
+  key         String   @id
+  value       Json
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("platform_setting")
+}
+
+// ───────────────────────────── Catalog [Phase 2] ─────────────────────────────
+// Everything here is admin-configurable data, never hard-coded business logic.
+
+enum Availability {
+  LIVE
+  NEXT_UP
+  PLANNED
+  HIDDEN
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+model CareerRole {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  slug           String       @unique
+  title          String
+  /// Two/three-letter badge, e.g. "AI".
+  shortCode      String       @map("short_code")
+  tagline        String
+  description    String
+  /// string[]: what this role is expected to know.
+  competencies   Json
+  /// string[]: what its interviews focus on.
+  interviewFocus Json         @map("interview_focus")
+  /// Categorical palette key g0..g4 used for the role badge.
+  colorKey       String       @default("g0") @map("color_key")
+  availability   Availability @default(PLANNED)
+  sortOrder      Int          @default(0) @map("sort_order")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedById    String?      @map("updated_by_id") @db.Uuid
+
+  skillAreas RoleSkillArea[]
+  goals      StudentGoal[]
+  curricula  RoleCurriculum[]
+
+  @@index([availability, sortOrder])
+  @@map("career_role")
+}
+
+/// Target annual compensation bands (not pricing plans).
+model PackageBracket {
+  id           String       @id @default(uuid(7)) @db.Uuid
+  code         String       @unique
+  label        String
+  /// Lakhs per annum, inclusive lower bound.
+  minLpa       Int          @map("min_lpa")
+  /// Lakhs per annum, upper bound. Null means "and above".
+  maxLpa       Int?         @map("max_lpa")
+  headline     String
+  /// Plain-language summary of what interviews at this level expect.
+  expectations String
+  availability Availability @default(PLANNED)
+  sortOrder    Int          @default(0) @map("sort_order")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedById  String?      @map("updated_by_id") @db.Uuid
+
+  difficultyPolicy BracketDifficultyPolicy[]
+  goals            StudentGoal[]
+  curricula        RoleCurriculum[]
+
+  @@index([availability, sortOrder])
+  @@map("package_bracket")
+}
+
+/// Configurable content-depth scale (default Foundational..Expert).
+model DepthLevel {
+  rank               Int      @id
+  code               String   @unique
+  name               String
+  description        String
+  /// What genuinely changes at this depth. Injected into content-generation prompts.
+  generationGuidance String   @map("generation_guidance")
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedById        String?  @map("updated_by_id") @db.Uuid
+
+  curriculumItems RoleCurriculumItem[]
+
+  @@map("depth_level")
+}
+
+/// Groups of topics students self-rate during onboarding.
+model SkillArea {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  slug        String   @unique
+  name        String
+  description String
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  roles   RoleSkillArea[]
+  ratings StudentSkillRating[]
+  topics  Topic[]
+
+  @@map("skill_area")
+}
+
+model RoleSkillArea {
+  roleId      String @map("role_id") @db.Uuid
+  skillAreaId String @map("skill_area_id") @db.Uuid
+  /// 1 = useful, 2 = important, 3 = core for this role.
+  importance  Int    @default(2)
+
+  role      CareerRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  skillArea SkillArea  @relation(fields: [skillAreaId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, skillAreaId])
+  @@index([skillAreaId])
+  @@map("role_skill_area")
+}
+
+/// Employers used for "asked at" question tags and target-company preferences.
+model Company {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("company")
+}
+
+/// Share of each question difficulty used for practice at a package bracket.
+model BracketDifficultyPolicy {
+  bracketId  String             @map("bracket_id") @db.Uuid
+  difficulty QuestionDifficulty
+  weight     Int
+
+  bracket PackageBracket @relation(fields: [bracketId], references: [id], onDelete: Cascade)
+
+  @@id([bracketId, difficulty])
+  @@map("bracket_difficulty_policy")
+}
+
+// ───────────────────────────── Cohorts [Phase 2] ─────────────────────────────
+
+model Cohort {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  name      String    @unique
+  startsOn  DateTime? @map("starts_on") @db.Date
+  endsOn    DateTime? @map("ends_on") @db.Date
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  members   CohortMember[]
+  allowlist EnrollmentAllowlist[]
+
+  @@map("cohort")
+}
+
+model CohortMember {
+  cohortId  String   @map("cohort_id") @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  addedAt   DateTime @default(now()) @map("added_at") @db.Timestamptz(3)
+
+  cohort  Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([cohortId, studentId])
+  @@index([studentId])
+  @@map("cohort_member")
+}
+
+// ───────────────────────────── Goals [Phase 2] ─────────────────────────────
+
+/// A student's target. Exactly one active goal per student (partial unique index in SQL).
+model StudentGoal {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  studentId     String    @map("student_id") @db.Uuid
+  roleId        String    @map("role_id") @db.Uuid
+  bracketId     String    @map("bracket_id") @db.Uuid
+  dailyMinutes  Int       @map("daily_minutes")
+  /// 0 = Sunday ... 6 = Saturday
+  studyWeekdays Int[]     @map("study_weekdays")
+  startDate     DateTime  @map("start_date") @db.Date
+  deadline      DateTime? @db.Date
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  endedAt       DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  student User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  role    CareerRole     @relation(fields: [roleId], references: [id])
+  bracket PackageBracket @relation(fields: [bracketId], references: [id])
+  roadmap Roadmap?
+
+  @@index([studentId, isActive])
+  @@index([roleId, bracketId])
+  @@map("student_goal")
+}
+
+model StudentSkillRating {
+  studentId   String   @map("student_id") @db.Uuid
+  skillAreaId String   @map("skill_area_id") @db.Uuid
+  /// 0 new, 1 basics, 2 comfortable, 3 confident
+  level       Int
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  student   User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  skillArea SkillArea @relation(fields: [skillAreaId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, skillAreaId])
+  @@index([skillAreaId])
+  @@map("student_skill_rating")
+}
+
+enum InterestKind {
+  ROLE
+  BRACKET
+  TOPIC
+  CASE_STUDY
+}
+
+/// "Notify me when this is live": a demand signal for admins.
+model InterestSignal {
+  id         String       @id @default(uuid(7)) @db.Uuid
+  studentId  String       @map("student_id") @db.Uuid
+  kind       InterestKind
+  targetId   String       @map("target_id") @db.Uuid
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  notifiedAt DateTime?    @map("notified_at") @db.Timestamptz(3)
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, kind, targetId])
+  @@index([kind, targetId])
+  @@map("interest_signal")
+}
+
+// ───────────────────────────── External sign-in [Phase 2.1] ─────────────────────────────
+
+enum IdentityProvider {
+  GOOGLE
+}
+
+/// A linked external login (e.g. a Google account). Matched by the provider's stable subject id.
+model UserIdentity {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  provider       IdentityProvider
+  /// The provider's stable user id (OIDC `sub`), never the email.
+  providerUserId String           @map("provider_user_id")
+  email          String
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt     DateTime         @default(now()) @map("last_used_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("user_identity")
+}
+
+/// One in-flight OAuth sign-in (state, PKCE verifier, nonce). Single use, expires in minutes.
+model OAuthLoginAttempt {
+  /// SHA-256 of the `state` value (the raw state lives only in the URL and a browser cookie).
+  id           String           @id
+  provider     IdentityProvider
+  audience     SessionAudience
+  codeVerifier String           @map("code_verifier")
+  nonce        String
+  next         String
+  expiresAt    DateTime         @map("expires_at") @db.Timestamptz(3)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("oauth_login_attempt")
+}
+
+// ───────────────────────────── Curriculum [Phase 3] ─────────────────────────────
+// Topics and subtopics are GLOBAL and shared across roles. What a role × package needs
+// (which subtopics, how deep, how important) lives in RoleCurriculum, versioned.
+
+enum TaxonomyStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum CurriculumStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+model Topic {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  slug        String         @unique
+  title       String
+  summary     String
+  /// lucide icon name used in the apps, e.g. "brain-circuit".
+  iconKey     String         @default("book-open") @map("icon_key")
+  skillAreaId String?        @map("skill_area_id") @db.Uuid
+  sortOrder   Int            @default(0) @map("sort_order")
+  status      TaxonomyStatus @default(ACTIVE)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  skillArea     SkillArea?          @relation(fields: [skillAreaId], references: [id], onDelete: SetNull)
+  subtopics     Subtopic[]
+  prerequisites TopicPrerequisite[] @relation("TopicNeeds")
+  requiredBy    TopicPrerequisite[] @relation("TopicNeededBy")
+  roadmapItems  RoadmapItem[]
+
+  @@index([status, sortOrder])
+  @@map("topic")
+}
+
+/// topic needs prerequisite first.
+model TopicPrerequisite {
+  topicId        String @map("topic_id") @db.Uuid
+  prerequisiteId String @map("prerequisite_id") @db.Uuid
+
+  topic        Topic @relation("TopicNeeds", fields: [topicId], references: [id], onDelete: Cascade)
+  prerequisite Topic @relation("TopicNeededBy", fields: [prerequisiteId], references: [id], onDelete: Cascade)
+
+  @@id([topicId, prerequisiteId])
+  @@index([prerequisiteId])
+  @@map("topic_prerequisite")
+}
+
+model Subtopic {
+  id         String         @id @default(uuid(7)) @db.Uuid
+  topicId    String         @map("topic_id") @db.Uuid
+  slug       String
+  title      String
+  summary    String
+  sortOrder  Int            @default(0) @map("sort_order")
+  /// 1 (light) … 5 (heavy): scales time estimates.
+  complexity Int            @default(3)
+  status     TaxonomyStatus @default(ACTIVE)
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  topic           Topic                  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  concepts        Concept[]
+  prerequisites   SubtopicPrerequisite[] @relation("SubtopicNeeds")
+  requiredBy      SubtopicPrerequisite[] @relation("SubtopicNeededBy")
+  curriculumItems RoleCurriculumItem[]
+  roadmapItems    RoadmapItem[]
+  lesson          LearningModule?
+  lessonProgress  ModuleProgress[]
+
+  @@unique([topicId, slug])
+  @@index([topicId, sortOrder])
+  @@map("subtopic")
+}
+
+model SubtopicPrerequisite {
+  subtopicId     String @map("subtopic_id") @db.Uuid
+  prerequisiteId String @map("prerequisite_id") @db.Uuid
+
+  subtopic     Subtopic @relation("SubtopicNeeds", fields: [subtopicId], references: [id], onDelete: Cascade)
+  prerequisite Subtopic @relation("SubtopicNeededBy", fields: [prerequisiteId], references: [id], onDelete: Cascade)
+
+  @@id([subtopicId, prerequisiteId])
+  @@index([prerequisiteId])
+  @@map("subtopic_prerequisite")
+}
+
+/// The finest skill tag. Links lesson sections, questions and mastery (Phases 4–5).
+model Concept {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  subtopicId  String   @map("subtopic_id") @db.Uuid
+  /// Stable dotted key, e.g. "rag.chunking.size-overlap".
+  key         String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  subtopic Subtopic         @relation(fields: [subtopicId], references: [id], onDelete: Cascade)
+  sections SectionConcept[]
+
+  @@index([subtopicId, sortOrder])
+  @@map("concept")
+}
+
+/// What one role × package needs. One PUBLISHED and at most one DRAFT at a time (SQL partial indexes).
+model RoleCurriculum {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  roleId        String           @map("role_id") @db.Uuid
+  bracketId     String           @map("bracket_id") @db.Uuid
+  version       Int
+  status        CurriculumStatus @default(DRAFT)
+  changeNote    String?          @map("change_note")
+  publishedAt   DateTime?        @map("published_at") @db.Timestamptz(3)
+  publishedById String?          @map("published_by_id") @db.Uuid
+  createdById   String?          @map("created_by_id") @db.Uuid
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  role            CareerRole           @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  bracket         PackageBracket       @relation(fields: [bracketId], references: [id], onDelete: Cascade)
+  items           RoleCurriculumItem[]
+  roadmapVersions RoadmapVersion[]
+
+  @@unique([roleId, bracketId, version])
+  @@map("role_curriculum")
+}
+
+model RoleCurriculumItem {
+  id                        String   @id @default(uuid(7)) @db.Uuid
+  roleCurriculumId          String   @map("role_curriculum_id") @db.Uuid
+  subtopicId                String   @map("subtopic_id") @db.Uuid
+  priority                  Priority @default(MEDIUM)
+  targetDepthRank           Int      @map("target_depth_rank")
+  isOptional                Boolean  @default(false) @map("is_optional")
+  /// string[]: what the student will be able to do at this depth.
+  learningObjectives        Json     @map("learning_objectives")
+  implementationExpectation String?  @map("implementation_expectation")
+  estimateMinutesOverride   Int?     @map("estimate_minutes_override")
+  /// Why this subtopic is at this depth for this package (shown to admins, summarised to students).
+  rationale                 String?
+  /// ADMIN or AI_PROPOSAL (Phase 6).
+  origin                    String   @default("ADMIN")
+
+  curriculum RoleCurriculum @relation(fields: [roleCurriculumId], references: [id], onDelete: Cascade)
+  subtopic   Subtopic       @relation(fields: [subtopicId], references: [id], onDelete: Cascade)
+  depth      DepthLevel     @relation(fields: [targetDepthRank], references: [rank])
+
+  @@unique([roleCurriculumId, subtopicId])
+  @@index([subtopicId])
+  @@map("role_curriculum_item")
+}
+
+// ───────────────────────────── Roadmaps [Phase 3] ─────────────────────────────
+
+enum RoadmapVersionStatus {
+  PROPOSED
+  ACTIVE
+  SUPERSEDED
+  DECLINED
+}
+
+enum RoadmapTrigger {
+  INITIAL
+  SETTINGS_CHANGE
+  CURRICULUM_UPDATE
+  REPLAN
+}
+
+/// One roadmap per goal. Its versions are immutable snapshots of the plan.
+model Roadmap {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  goalId    String   @unique @map("goal_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  student  User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  goal     StudentGoal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  versions RoadmapVersion[]
+
+  @@index([studentId])
+  @@map("roadmap")
+}
+
+model RoadmapVersion {
+  id               String               @id @default(uuid(7)) @db.Uuid
+  roadmapId        String               @map("roadmap_id") @db.Uuid
+  versionNumber    Int                  @map("version_number")
+  status           RoadmapVersionStatus
+  trigger          RoadmapTrigger
+  roleCurriculumId String               @map("role_curriculum_id") @db.Uuid
+  /// Everything the planner used (schedule, ratings, start date) so a version can be explained.
+  inputs           Json
+  /// added / removed / depthChanged / minutesDelta / endDateDeltaDays vs the version it replaces.
+  changeSummary    Json?                @map("change_summary")
+  totalMinutes     Int                  @map("total_minutes")
+  plannedEndDate   DateTime?            @map("planned_end_date") @db.Date
+  /// Null when there is no deadline.
+  deadlineFeasible Boolean?             @map("deadline_feasible")
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  decidedAt        DateTime?            @map("decided_at") @db.Timestamptz(3)
+
+  roadmap    Roadmap        @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  curriculum RoleCurriculum @relation(fields: [roleCurriculumId], references: [id])
+  items      RoadmapItem[]
+
+  @@unique([roadmapId, versionNumber])
+  @@index([roadmapId, status])
+  @@map("roadmap_version")
+}
+
+model RoadmapItem {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  roadmapVersionId String    @map("roadmap_version_id") @db.Uuid
+  subtopicId       String    @map("subtopic_id") @db.Uuid
+  topicId          String    @map("topic_id") @db.Uuid
+  sequence         Int
+  targetDepthRank  Int       @map("target_depth_rank")
+  priority         Priority
+  isOptional       Boolean   @map("is_optional")
+  fastTrack        Boolean   @map("fast_track")
+  estimatedMinutes Int       @map("estimated_minutes")
+  plannedStart     DateTime? @map("planned_start") @db.Date
+  plannedEnd       DateTime? @map("planned_end") @db.Date
+
+  version  RoadmapVersion @relation(fields: [roadmapVersionId], references: [id], onDelete: Cascade)
+  subtopic Subtopic       @relation(fields: [subtopicId], references: [id])
+  topic    Topic          @relation(fields: [topicId], references: [id])
+
+  @@unique([roadmapVersionId, subtopicId])
+  @@index([roadmapVersionId, sequence])
+  @@map("roadmap_item")
+}
+
+// ───────────────────────────── Content [Phase 4] ─────────────────────────────
+// A lesson is typed JSON (packages/content), never HTML. A version is an ordered list of
+// pointers to IMMUTABLE section revisions: editing one section makes one new revision, so
+// history, diffs and "changed since you finished" stay cheap. Nothing reaches students until
+// a person approves and publishes it (one PUBLISHED and at most one working version per
+// lesson: SQL partial indexes).
+
+enum ModuleVersionStatus {
+  DRAFT
+  AI_GENERATED
+  UNDER_REVIEW
+  APPROVED
+  PUBLISHED
+  SUPERSEDED
+  ARCHIVED
+}
+
+enum ContentOrigin {
+  IMPORT
+  MANUAL
+  AI
+}
+
+enum SectionKind {
+  HOOK
+  EXPLANATION
+  CARD_DECK
+  DIAGRAM
+  CODE_EXAMPLE
+  CODE_EXPLORER
+  WIDGET
+  KNOWLEDGE_CHECK
+  PLAYGROUND
+  CALLOUT
+  INTERVIEW_PLAYBOOK
+  SUMMARY
+}
+
+enum ReviewDecision {
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+}
+
+/// The "Learn the Concept" lesson for one subtopic, shared by every role and package.
+model LearningModule {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  subtopicId String   @unique @map("subtopic_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  subtopic  Subtopic          @relation(fields: [subtopicId], references: [id], onDelete: Restrict)
+  versions  ModuleVersion[]
+  revisions SectionRevision[]
+
+  @@map("learning_module")
+}
+
+model ModuleVersion {
+  id               String              @id @default(uuid(7)) @db.Uuid
+  moduleId         String              @map("module_id") @db.Uuid
+  versionNumber    Int                 @map("version_number")
+  status           ModuleVersionStatus
+  origin           ContentOrigin
+  title            String
+  subtitle         String?
+  /// Objective[] (validated by @app/content).
+  objectives       Json
+  basedOnVersionId String?             @map("based_on_version_id") @db.Uuid
+  changeNote       String?             @map("change_note")
+  /// Writing style the checks hold this lesson to: genz | standard | deep.
+  style            String              @default("standard")
+  /// +1 on every edit. Writers send the value they loaded, so two editors never overwrite each other.
+  editSeq          Int                 @default(0) @map("edit_seq")
+  createdById      String?             @map("created_by_id") @db.Uuid
+  updatedById      String?             @map("updated_by_id") @db.Uuid
+  submittedAt      DateTime?           @map("submitted_at") @db.Timestamptz(3)
+  submittedById    String?             @map("submitted_by_id") @db.Uuid
+  publishedAt      DateTime?           @map("published_at") @db.Timestamptz(3)
+  publishedById    String?             @map("published_by_id") @db.Uuid
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  module      LearningModule         @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  basedOn     ModuleVersion?         @relation("VersionLineage", fields: [basedOnVersionId], references: [id], onDelete: SetNull)
+  derived     ModuleVersion[]        @relation("VersionLineage")
+  sections    ModuleVersionSection[]
+  reviews     ContentReview[]
+  progress    ModuleProgress[]
+  feedback    Feedback[]
+  evaluations ContentEvaluation[]
+
+  @@unique([moduleId, versionNumber])
+  @@index([status])
+  @@map("module_version")
+}
+
+/// Immutable. Identical content reuses the same revision (content hash).
+model SectionRevision {
+  id               String        @id @default(uuid(7)) @db.Uuid
+  moduleId         String        @map("module_id") @db.Uuid
+  /// Stable across versions, e.g. "explore.size-overlap".
+  sectionKey       String        @map("section_key")
+  kind             SectionKind
+  title            String?
+  /// The minimum target depth that sees this section.
+  depthRank        Int           @map("depth_rank")
+  slotKey          String?       @map("slot_key")
+  /// Role slugs; empty means every role.
+  roleScope        String[]      @map("role_scope")
+  /// A fixed estimate from the author; null means computed from the content.
+  estimatedMinutes Int?          @map("estimated_minutes")
+  body             Json
+  /// SHA-256 of the canonical section JSON.
+  contentHash      String        @map("content_hash")
+  origin           ContentOrigin
+  /// For AI revisions (Phase 4B): prompt key@version, model and job.
+  generationMeta   Json?         @map("generation_meta")
+  createdById      String?       @map("created_by_id") @db.Uuid
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  module   LearningModule          @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  usedBy   ModuleVersionSection[]
+  concepts SectionConcept[]
+  attempts KnowledgeCheckAttempt[]
+  feedback Feedback[]
+
+  @@unique([moduleId, sectionKey, contentHash])
+  @@index([moduleId, sectionKey, createdAt])
+  @@map("section_revision")
+}
+
+/// Which concepts a section teaches: the link between Learn and Practice.
+model SectionConcept {
+  sectionRevisionId String @map("section_revision_id") @db.Uuid
+  conceptId         String @map("concept_id") @db.Uuid
+
+  revision SectionRevision @relation(fields: [sectionRevisionId], references: [id], onDelete: Cascade)
+  concept  Concept         @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+
+  @@id([sectionRevisionId, conceptId])
+  @@index([conceptId])
+  @@map("section_concept")
+}
+
+model ModuleVersionSection {
+  moduleVersionId   String @map("module_version_id") @db.Uuid
+  sectionKey        String @map("section_key")
+  sectionRevisionId String @map("section_revision_id") @db.Uuid
+  orderIndex        Int    @map("order_index")
+
+  version  ModuleVersion   @relation(fields: [moduleVersionId], references: [id], onDelete: Cascade)
+  revision SectionRevision @relation(fields: [sectionRevisionId], references: [id], onDelete: Restrict)
+
+  @@id([moduleVersionId, sectionKey])
+  @@index([sectionRevisionId])
+  @@map("module_version_section")
+}
+
+/// A reviewer's decision on a version, with optional notes per section.
+model ContentReview {
+  id              String         @id @default(uuid(7)) @db.Uuid
+  moduleVersionId String         @map("module_version_id") @db.Uuid
+  decision        ReviewDecision
+  notes           String?
+  /// { [sectionKey]: note }
+  sectionNotes    Json           @default("{}") @map("section_notes")
+  reviewerId      String         @map("reviewer_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  version ModuleVersion @relation(fields: [moduleVersionId], references: [id], onDelete: Cascade)
+
+  @@index([moduleVersionId, createdAt])
+  @@map("content_review")
+}
+
+// ───────────────────────────── Learning progress [Phase 4] ─────────────────────────────
+// Learning progress is tracked separately from practice: finishing a lesson is not mastery.
+
+enum LessonStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// One row per student × subtopic: resume point and completion.
+model ModuleProgress {
+  id                   String       @id @default(uuid(7)) @db.Uuid
+  studentId            String       @map("student_id") @db.Uuid
+  subtopicId           String       @map("subtopic_id") @db.Uuid
+  /// The lesson version the student last opened.
+  moduleVersionId      String       @map("module_version_id") @db.Uuid
+  status               LessonStatus @default(IN_PROGRESS)
+  /// Section keys are stable across versions, so progress survives a new version.
+  completedSectionKeys String[]     @map("completed_section_keys")
+  lastSectionKey       String?      @map("last_section_key")
+  timeSpentSec         Int          @default(0) @map("time_spent_sec")
+  startedAt            DateTime     @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt          DateTime?    @map("completed_at") @db.Timestamptz(3)
+  /// The version they finished; a newer published version shows "updated since you finished".
+  completedVersionId   String?      @map("completed_version_id") @db.Uuid
+  updatedAt            DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  student  User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subtopic Subtopic      @relation(fields: [subtopicId], references: [id], onDelete: Cascade)
+  version  ModuleVersion @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, subtopicId])
+  @@index([subtopicId, status])
+  @@map("module_progress")
+}
+
+/// Answers to in-lesson checks (reinforcement, not practice). Every try is kept.
+model KnowledgeCheckAttempt {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  studentId         String   @map("student_id") @db.Uuid
+  sectionRevisionId String   @map("section_revision_id") @db.Uuid
+  itemKey           String   @map("item_key")
+  /// Null while a written answer waits for the student's self-rating.
+  isCorrect         Boolean? @map("is_correct")
+  response          Json
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  student  User            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  revision SectionRevision @relation(fields: [sectionRevisionId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, sectionRevisionId, createdAt])
+  @@index([sectionRevisionId, itemKey])
+  @@map("knowledge_check_attempt")
+}
+
+enum FeedbackTarget {
+  SECTION
+  LESSON
+  PAGE
+}
+
+enum Thumbs {
+  UP
+  DOWN
+}
+
+/// Thumbs on a step, the end-of-lesson rating, or the floating feedback button. Always tied to
+/// the exact revision shown, so a fix can target it.
+model Feedback {
+  id                String         @id @default(uuid(7)) @db.Uuid
+  studentId         String         @map("student_id") @db.Uuid
+  targetType        FeedbackTarget @map("target_type")
+  moduleVersionId   String?        @map("module_version_id") @db.Uuid
+  sectionKey        String?        @map("section_key")
+  sectionRevisionId String?        @map("section_revision_id") @db.Uuid
+  /// App path for PAGE feedback, e.g. "/roadmap".
+  page              String?
+  thumbs            Thumbs?
+  /// 1–5 faces.
+  rating            Int?
+  tags              String[]
+  text              String?
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  student         User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  moduleVersion   ModuleVersion?   @relation(fields: [moduleVersionId], references: [id], onDelete: Cascade)
+  sectionRevision SectionRevision? @relation(fields: [sectionRevisionId], references: [id], onDelete: Cascade)
+
+  @@index([targetType, createdAt])
+  @@index([sectionRevisionId])
+  @@index([moduleVersionId])
+  @@map("feedback")
+}
+
+// ───────────────────────────── AI agents [Phase 4B] ─────────────────────────────
+// Admin-triggered only. Students never see jobs, prompts or drafts. Every AI call is recorded
+// with its prompt version, tokens and cost; nothing an agent writes is published without review.
+
+enum AgentJobType {
+  LESSON_GENERATION
+  LESSON_EVALUATION
+  SECTION_REWRITE
+}
+
+enum AgentJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum AiCallStatus {
+  OK
+  ERROR
+  REFUSED
+}
+
+enum EvaluationVerdict {
+  READY_FOR_REVIEW
+  NEEDS_CHANGES
+  BLOCKING_ISSUES
+}
+
+model AgentJob {
+  id              String         @id @default(uuid(7)) @db.Uuid
+  type            AgentJobType
+  status          AgentJobStatus @default(QUEUED)
+  /// Current pipeline stage, e.g. "Planning", "Writing steps 2 of 4".
+  stage           String?
+  /// 0–100.
+  progress        Int            @default(0)
+  subtopicId      String?        @map("subtopic_id") @db.Uuid
+  moduleVersionId String?        @map("module_version_id") @db.Uuid
+  sectionKey      String?        @map("section_key")
+  input           Json
+  output          Json?
+  error           String?
+  parentJobId     String?        @map("parent_job_id") @db.Uuid
+  cancelRequested Boolean        @default(false) @map("cancel_requested")
+  budgetUsd       Float          @map("budget_usd")
+  /// Approximate spend from the model price table (for monitoring, not billing).
+  costUsd         Float          @default(0) @map("cost_usd")
+  inputTokens     Int            @default(0) @map("input_tokens")
+  outputTokens    Int            @default(0) @map("output_tokens")
+  createdById     String?        @map("created_by_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  startedAt       DateTime?      @map("started_at") @db.Timestamptz(3)
+  finishedAt      DateTime?      @map("finished_at") @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  parent   AgentJob?       @relation("JobChildren", fields: [parentJobId], references: [id], onDelete: SetNull)
+  children AgentJob[]      @relation("JobChildren")
+  logs     AgentJobLog[]
+  usage    AiUsageRecord[]
+
+  @@index([subtopicId, createdAt])
+  @@index([moduleVersionId, createdAt])
+  @@index([status, createdAt])
+  @@map("agent_job")
+}
+
+model AgentJobLog {
+  id        BigInt   @id @default(autoincrement())
+  jobId     String   @map("job_id") @db.Uuid
+  /// info | warn | error
+  level     String
+  message   String
+  data      Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  job AgentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, id])
+  @@map("agent_job_log")
+}
+
+/// One row per model call.
+model AiUsageRecord {
+  id               String       @id @default(uuid(7)) @db.Uuid
+  jobId            String?      @map("job_id") @db.Uuid
+  task             String
+  provider         String
+  model            String
+  promptKey        String       @map("prompt_key")
+  promptVersion    Int          @map("prompt_version")
+  inputTokens      Int          @default(0) @map("input_tokens")
+  outputTokens     Int          @default(0) @map("output_tokens")
+  cacheReadTokens  Int          @default(0) @map("cache_read_tokens")
+  cacheWriteTokens Int          @default(0) @map("cache_write_tokens")
+  costUsd          Float        @default(0) @map("cost_usd")
+  latencyMs        Int          @map("latency_ms")
+  status           AiCallStatus
+  error            String?
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  job AgentJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([jobId])
+  @@map("ai_usage_record")
+}
+
+/// Which model does which task. Editable by super admins.
+model AiModelRoute {
+  task        String   @id
+  model       String
+  /// low | medium | high | xhigh | max
+  effort      String
+  maxTokens   Int      @map("max_tokens")
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ai_model_route")
+}
+
+/// USD per million tokens, for cost estimates.
+model AiModelPricing {
+  model             String   @id
+  inputPerMTok      Float    @map("input_per_mtok")
+  outputPerMTok     Float    @map("output_per_mtok")
+  cacheReadPerMTok  Float    @map("cache_read_per_mtok")
+  cacheWritePerMTok Float    @map("cache_write_per_mtok")
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ai_model_pricing")
+}
+
+/// The evaluator's report on a lesson version: scores, issues per step, checks that need no AI.
+model ContentEvaluation {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  moduleVersionId String            @map("module_version_id") @db.Uuid
+  jobId           String?           @map("job_id") @db.Uuid
+  model           String
+  verdict         EvaluationVerdict
+  /// Mean of the dimension scores (1–5).
+  overall         Float
+  scores          Json
+  issues          Json
+  summary         String
+  /// Readability, style budgets, code runs and depth checks (computed, not judged).
+  metrics         Json
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  version ModuleVersion @relation(fields: [moduleVersionId], references: [id], onDelete: Cascade)
+
+  @@index([moduleVersionId, createdAt])
+  @@map("content_evaluation")
+}

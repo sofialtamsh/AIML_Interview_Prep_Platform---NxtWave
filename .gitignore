@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.vite/
+apps/api/src/generated/
+apps/api/storage/
+
+# Dev-server-only demo logins (never loaded by production builds)
+!apps/*/.env.development
+
+# Python packages cached by the lesson code verifier
+.cache/
