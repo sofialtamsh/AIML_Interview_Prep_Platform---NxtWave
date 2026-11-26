@@ -20,7 +20,9 @@
   },
   "devDependencies": {
     "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "react": "19.3.1",
+    "react-dom": "19.3.1",
     "vitest": "4.1.12"
   }
 }

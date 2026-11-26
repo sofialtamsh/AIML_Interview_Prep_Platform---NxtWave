@@ -10,17 +10,29 @@ import { useMutation } from '@tanstack/react-query';
 import {
   AlarmClock,
   BookOpen,
+  Brain,
   CircleCheck,
   CircleDot,
   Circle as CircleIcon,
   CirclePlay,
+  Code2,
+  Database,
+  Gauge,
   Grid3x3,
+  Layers,
   Library,
   type LucideIcon,
+  Mic,
+  Network,
+  Presentation,
+  Rocket,
   ScanSearch,
+  Sparkles,
+  Table2,
   Zap,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { SELF_PACED } from '../../lib/features';
 import { setGoal, useGoal } from '../../lib/queries';
 import { WEEKDAYS } from '../goal/pickers';
 
@@ -48,6 +60,13 @@ export function formatRange(start: string | null, end: string | null) {
   return start === end ? formatDate(start) : `${formatDate(start)} → ${formatDate(end)}`;
 }
 
+/**
+ * The dates a unit or topic is planned for, as shown to the student. Self-paced there is no
+ * schedule, so there is nothing to show.
+ */
+export const scheduleRange = (start: string | null, end: string | null) =>
+  SELF_PACED ? null : formatRange(start, end);
+
 /** "45 min", "1 h 35 min", "16 h". */
 export function formatMinutes(total: number) {
   const h = Math.floor(total / 60);
@@ -67,6 +86,13 @@ export const STATUS: Record<ItemStatus, { label: string; tone: BadgeTone; Icon: 
   UP_NEXT: { label: 'Up next', tone: 'next', Icon: CirclePlay },
   UPCOMING: { label: 'Coming up', tone: 'neutral', Icon: CircleIcon },
 };
+
+/**
+ * A unit's status as shown. Self-paced, nothing is ever "behind": a unit whose planned date has
+ * passed is simply in progress if it was started, and still to come if it was not.
+ */
+export const shownStatus = (status: ItemStatus, started = false): ItemStatus =>
+  SELF_PACED && status === 'DELAYED' ? (started ? 'IN_PROGRESS' : 'UPCOMING') : status;
 
 export function StatusIcon({ status, className }: { status: ItemStatus; className?: string }) {
   const { Icon, label } = STATUS[status];
@@ -111,6 +137,17 @@ const TOPIC_ICONS: Record<string, LucideIcon> = {
   'grid-3x3': Grid3x3,
   'scan-search': ScanSearch,
   library: Library,
+  mic: Mic,
+  code: Code2,
+  brain: Brain,
+  table: Table2,
+  network: Network,
+  gauge: Gauge,
+  presentation: Presentation,
+  layers: Layers,
+  sparkles: Sparkles,
+  database: Database,
+  rocket: Rocket,
 };
 
 export function TopicIcon({ iconKey, className }: { iconKey: string; className?: string }) {
@@ -131,7 +168,7 @@ export function FastTrackBadge() {
 
 export const TRIGGER_LABEL: Record<RoadmapVersionDto['trigger'], string> = {
   INITIAL: 'Built from your target',
-  SETTINGS_CHANGE: 'Re-planned after you changed your time',
+  SETTINGS_CHANGE: 'Re-planned after your study time changed',
   REPLAN: 'Re-planned from today',
   CURRICULUM_UPDATE: 'Updated with the latest curriculum',
 };
@@ -180,8 +217,17 @@ export function ChangeList({ summary }: { summary: ChangeSummaryDto }) {
 
 // ───────────── Deadline doesn't fit ─────────────
 
-/** Shows why the deadline doesn't fit and lets the student pick a fix. Nothing changes on its own. */
-export function FeasibilityCard({ feasibility }: { feasibility: FeasibilityDto }) {
+/**
+ * Shows why the deadline doesn't fit and lets the student pick a fix. Nothing changes on its own.
+ * `readOnly` (the team sets the time): the warning stays, the fixes that change time don't.
+ */
+export function FeasibilityCard({
+  feasibility,
+  readOnly = false,
+}: {
+  feasibility: FeasibilityDto;
+  readOnly?: boolean;
+}) {
   const { data } = useGoal();
   const g = data?.goal;
   const apply = useMutation({
@@ -198,6 +244,23 @@ export function FeasibilityCard({ feasibility }: { feasibility: FeasibilityDto }
   });
   if (feasibility.feasible || !g) return null;
   const o = feasibility.options;
+
+  if (readOnly) {
+    return (
+      <div className="flex items-start gap-3 rounded-[var(--radius-card)] border border-warn/30 bg-warn-bg p-4">
+        <AlarmClock className="mt-0.5 size-5 shrink-0 text-warn" aria-hidden />
+        <div className="min-w-0 text-sm">
+          <b className="block text-warn">
+            {`At this pace you finish ${feasibility.daysOver} day${feasibility.daysOver === 1 ? '' : 's'} after the target date (${formatDateLong(feasibility.deadline)})`}
+          </b>
+          <span className="text-ink-2">
+            Stick to your daily target and re-plan from today whenever you fall behind. A few extra
+            minutes on study days closes the gap.
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-[var(--radius-card)] border border-warn/30 bg-warn-bg p-5">

@@ -1,0 +1,53 @@
+[
+  {
+    "id": "python",
+    "name": "Python for Data Analytics",
+    "aliases": ["Python for DA", "Python", "Python for Data Analysis"],
+    "short": "Python for DA",
+    "description": "NumPy and pandas on real datasets: cricket stats, stock prices and socio-economic data.",
+    "skills": ["NumPy", "pandas", "Data analysis"],
+    "icon": "chart",
+    "accent": "g1"
+  },
+  {
+    "id": "ml",
+    "name": "Machine Learning",
+    "aliases": ["ML"],
+    "short": "Machine Learning",
+    "description": "Classification, regression, ensembles and clustering, from KNN and SVM to end-to-end capstones.",
+    "skills": ["Classification", "Regression", "Ensembles", "Clustering"],
+    "icon": "brain",
+    "accent": "g0"
+  },
+  {
+    "id": "dl",
+    "name": "Deep Learning",
+    "aliases": ["DL"],
+    "short": "Deep Learning",
+    "description": "Activation and loss functions, forward and backpropagation, initialization and batch norm.",
+    "skills": ["Neural networks", "Backpropagation", "Training"],
+    "icon": "layers",
+    "accent": "g3"
+  },
+  {
+    "id": "nlp",
+    "name": "NLP",
+    "aliases": ["Natural Language Processing"],
+    "short": "NLP",
+    "fullName": "Natural Language Processing",
+    "description": "Text preprocessing, embeddings and retrieval, RNNs and LSTMs, through to transformers.",
+    "skills": ["Text processing", "Embeddings", "Sequence models"],
+    "icon": "text",
+    "accent": "g2"
+  },
+  {
+    "id": "cv",
+    "name": "Computer Vision",
+    "aliases": ["CV"],
+    "short": "Computer Vision",
+    "description": "Image fundamentals and filters, CNNs from scratch, classic architectures and a capstone.",
+    "skills": ["Images", "CNNs", "Architectures"],
+    "icon": "eye",
+    "accent": "g4"
+  }
+]

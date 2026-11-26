@@ -21,7 +21,7 @@ export function CompareTab({
   const rightKeys = new Set(right.sections.map((s) => s.key));
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       {module.targets.length < 2 && (
         <Alert tone="info">
           Only{' '}
@@ -31,13 +31,15 @@ export function CompareTab({
           this subtopic. Pick "Any depth" on one side to compare depths.
         </Alert>
       )}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Side by side only from `lg`: below that a column is too narrow for a target picker.
+          `minmax(0,...)` lets the two sides shrink with the window instead of pushing past it. */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {[
           { side: a, data: left, other: rightKeys },
           { side: b, data: right, other: leftKeys },
         ].map(({ side, data, other }, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: two fixed columns
-          <Card key={i} className="grid content-start gap-4 p-4">
+          <Card key={i} className="grid min-w-0 content-start gap-4 p-4">
             {side.picker}
             <div className="grid grid-cols-3 gap-2 text-center">
               <Stat label="Steps" value={data.sections.length} />
@@ -83,9 +85,9 @@ export function CompareTab({
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl bg-surface-2 px-2 py-2">
+    <div className="min-w-0 rounded-xl bg-surface-2 px-2 py-2">
       <div className="font-display text-[20px] font-bold">{value}</div>
-      <div className="text-[11px] text-muted">{label}</div>
+      <div className="truncate text-[11px] text-muted">{label}</div>
     </div>
   );
 }

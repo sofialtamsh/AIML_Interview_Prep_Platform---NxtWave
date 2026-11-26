@@ -1,19 +1,56 @@
 import { cn, Logo } from '@app/ui';
-import { House, LogOut, Route, SlidersHorizontal, UserRound } from 'lucide-react';
+import {
+  Dumbbell,
+  GraduationCap,
+  House,
+  LogOut,
+  type LucideIcon,
+  Route,
+  SlidersHorizontal,
+  UserRound,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { FeedbackButton } from '../../features/feedback/FeedbackButton';
+import { useTrackVisits } from '../../lib/activity';
 import { api, queryClient, setMe, useMe } from '../../lib/api';
+import { PRACTICE_HUB, SELF_PACED } from '../../lib/features';
 
-const NAV = [
-  { to: '/', label: 'Home', end: true, Icon: House },
-  { to: '/roadmap', label: 'Roadmap', end: false, Icon: Route },
-  { to: '/plan', label: 'My plan', end: false, Icon: SlidersHorizontal },
-] as const;
+interface NavItem {
+  to: string;
+  label: string;
+  Icon: LucideIcon;
+  /** Other paths this tab stays lit on: the pages reached from it. */
+  under: string[];
+}
+
+/**
+ * Self-paced, the app is two tabs: Learn (the subjects, their units and topics) and Practice.
+ * The dated tabs (Home dashboard, Roadmap, My plan) come back when SELF_PACED is turned off.
+ */
+const NAV: NavItem[] = SELF_PACED
+  ? [
+      { to: '/', label: 'Learn', Icon: GraduationCap, under: ['/roadmap', '/topics'] },
+      { to: '/practice', label: 'Practice', Icon: Dumbbell, under: [] },
+    ]
+  : [
+      { to: '/', label: 'Home', Icon: House, under: [] },
+      { to: '/roadmap', label: 'Roadmap', Icon: Route, under: ['/topics'] },
+      { to: '/plan', label: 'My plan', Icon: SlidersHorizontal, under: [] },
+      { to: '/practice', label: 'Practice', Icon: Dumbbell, under: [] },
+    ];
+
+const isOn = (item: NavItem, pathname: string) =>
+  (item.to === '/' ? pathname === '/' : pathname.startsWith(item.to)) ||
+  item.under.some((p) => pathname.startsWith(p));
 
 export function AppShell() {
   const { data: me } = useMe();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  useTrackVisits();
+  // The practice hub has its own full-width sections; every other page sits in the centred column.
+  const fullBleed = PRACTICE_HUB && pathname.startsWith('/practice');
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -57,27 +94,30 @@ export function AppShell() {
             <Logo subtitle="Interview Prep" />
           </Link>
           <nav className="hidden gap-1 sm:flex" aria-label="Main">
-            {NAV.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                end={n.end}
-                className={({ isActive }) =>
-                  cn(
-                    'rounded-lg px-3 py-1.5 text-sm font-medium text-ink-2 hover:bg-surface-2',
-                    isActive && 'bg-surface-2 font-semibold text-ink',
-                  )
-                }
-              >
-                {n.label}
-              </NavLink>
-            ))}
+            {NAV.map((n) => {
+              const on = isOn(n, pathname);
+              return (
+                <Link
+                  key={n.to}
+                  to={n.to}
+                  aria-current={on ? 'page' : undefined}
+                  className={cn(
+                    'rounded-lg px-3 py-1.5 text-sm hover:bg-surface-2',
+                    // One or the other: two colour classes on one element leave the winner to
+                    // the order of the stylesheet.
+                    on ? 'bg-surface-2 font-semibold text-ink' : 'font-medium text-ink-2',
+                  )}
+                >
+                  {n.label}
+                </Link>
+              );
+            })}
           </nav>
           <div className="relative ml-auto" ref={menuRef}>
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
-              className="grid size-9 place-items-center rounded-full bg-ink font-mono text-xs font-bold text-surface"
+              className="grid size-10 place-items-center rounded-full bg-ink font-mono text-xs font-bold text-surface sm:size-9"
               aria-haspopup="menu"
               aria-expanded={open}
               aria-label="Account menu"
@@ -114,7 +154,11 @@ export function AppShell() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 pt-7 pb-24 sm:px-6 sm:pb-7">
+      <main
+        className={cn(
+          fullBleed ? 'pb-16 sm:pb-0' : 'mx-auto max-w-6xl px-4 pt-7 pb-24 sm:px-6 sm:pb-7',
+        )}
+      >
         <Outlet />
       </main>
       <FeedbackButton />
@@ -124,23 +168,27 @@ export function AppShell() {
         className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md sm:hidden"
         aria-label="Main"
       >
-        <div className="grid grid-cols-3">
-          {NAV.map(({ to, label, end, Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                cn(
-                  'flex flex-col items-center gap-0.5 py-2.5 text-[11.5px] font-medium text-muted',
-                  isActive && 'font-semibold text-brand',
-                )
-              }
-            >
-              <Icon className="size-5" aria-hidden />
-              {label}
-            </NavLink>
-          ))}
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: `repeat(${NAV.length}, minmax(0, 1fr))` }}
+        >
+          {NAV.map((n) => {
+            const on = isOn(n, pathname);
+            return (
+              <Link
+                key={n.to}
+                to={n.to}
+                aria-current={on ? 'page' : undefined}
+                className={cn(
+                  'flex flex-col items-center gap-0.5 py-2.5 text-[11.5px]',
+                  on ? 'font-semibold text-brand' : 'font-medium text-muted',
+                )}
+              >
+                <n.Icon className="size-5" aria-hidden />
+                {n.label}
+              </Link>
+            );
+          })}
         </div>
       </nav>
     </div>

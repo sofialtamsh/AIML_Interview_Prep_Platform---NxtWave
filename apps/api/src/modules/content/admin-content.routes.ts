@@ -8,6 +8,7 @@ import {
   LessonIndexResponse,
   LessonModuleResponse,
   LessonVersionResponse,
+  OkResponse,
   PublishLessonBody,
   ReviewBody,
   RewriteSectionBody,
@@ -19,7 +20,7 @@ import {
   VersionSectionParam,
 } from '@app/contracts';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { actorOf, requireAdmin } from '../../http/auth.ts';
+import { actorOf, requireAdmin, requireSuperAdmin } from '../../http/auth.ts';
 
 const tags = ['admin-content'];
 
@@ -140,4 +141,14 @@ export const adminContentRoutes: FastifyPluginAsyncZod = async (app) => {
     content.unpublish(req.params.id, actorOf(req)),
   );
   app.post('/versions/:id/discard', version, (req) => content.discard(req.params.id, actorOf(req)));
+  // Deleting history cannot be undone, so it is a super admin's call, and the service refuses
+  // anything students see, anyone is working on, or any student has progress on.
+  app.delete(
+    '/versions/:id',
+    {
+      onRequest: requireSuperAdmin,
+      schema: { tags, params: VersionIdParam, response: { 200: OkResponse } },
+    },
+    (req) => content.remove(req.params.id, actorOf(req)),
+  );
 };

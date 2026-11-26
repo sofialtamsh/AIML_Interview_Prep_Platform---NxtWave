@@ -7,6 +7,7 @@ import {
   depthReport,
   EVAL_DIMENSIONS,
   EvaluationReport,
+  internalDataIssues,
   llmJsonSchema,
   readabilityOf,
   STYLE_KEYS,
@@ -92,6 +93,15 @@ export async function evaluateLesson(
         suggestion: 'Fix the code (or the marked answer) so it matches what Python really prints.',
         source: 'check' as const,
       })),
+    ...document.sections.flatMap(internalDataIssues).map((i) => ({
+      sectionKey: i.sectionKey,
+      severity: 'blocking' as const,
+      dimension: 'style' as const,
+      problem: i.message,
+      suggestion:
+        'Remove the data reference. Say "a common interview question" or "often asked in the first technical round" instead.',
+      source: 'check' as const,
+    })),
     ...report.issues.map((i) => ({ ...i, source: 'ai' as const })),
   ];
   const verdict = issues.some((i) => i.severity === 'blocking')

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { Availability, ColorKey, Slug } from './catalog';
 import { LessonSummaryDto } from './content';
 import { IsoDate, Schedule, SkillRatings } from './goals';
+import { StudentPracticeQuestion } from './practice';
 
 export const Priority = z.enum(['HIGH', 'MEDIUM', 'LOW']);
 export type Priority = z.infer<typeof Priority>;
@@ -210,6 +211,8 @@ export const RoadmapItemDto = z.object({
   plannedEnd: IsoDate.nullable(),
   status: ItemStatus,
   objectives: z.array(z.string()),
+  /** What the unit covers, in teaching order: the subtopics a student sees on the roadmap. */
+  concepts: z.array(z.string()),
 });
 export type RoadmapItemDto = z.infer<typeof RoadmapItemDto>;
 
@@ -369,12 +372,15 @@ export type PlanPreview = z.infer<typeof PlanPreview>;
 export const SchedulePreviewResponse = PlanPreview;
 export type SchedulePreviewResponse = z.infer<typeof SchedulePreviewResponse>;
 
-/** During onboarding there is no goal yet, so the choices so far are sent along. */
+/**
+ * During onboarding there is no goal yet, so the choices so far are sent along. Package and
+ * schedule are left out while the team's study plan decides them.
+ */
 export const OnboardingPlanPreviewBody = z.object({
   roleId: z.uuid(),
-  bracketId: z.uuid(),
+  bracketId: z.uuid().optional(),
   skills: SkillRatings.default({}),
-  schedule: Schedule,
+  schedule: Schedule.optional(),
 });
 export const OnboardingPlanPreviewResponse = z.object({
   /** Null when no curriculum is published for this target yet. */
@@ -408,6 +414,8 @@ export const TopicPageResponse = z.object({
     available: z.boolean(),
     questions: z.number().int(),
     notifyMe: z.boolean(),
+    /** Practice questions tagged with this topic (or one of its subtopics), for the student's role. */
+    items: z.array(StudentPracticeQuestion),
   }),
 });
 export type TopicPageResponse = z.infer<typeof TopicPageResponse>;

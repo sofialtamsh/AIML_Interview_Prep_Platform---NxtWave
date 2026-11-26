@@ -1,7 +1,20 @@
-import type { GoalResponse, SchedulePreviewResponse } from '@app/contracts';
-import { Alert, Button, Card, Dialog, errorMessage, fromApiError, Spinner } from '@app/ui';
+import type { GoalResponse, SchedulePreviewResponse, StudentStudyPlan } from '@app/contracts';
+import {
+  Alert,
+  Badge,
+  Button,
+  buttonClass,
+  Card,
+  cn,
+  Dialog,
+  errorMessage,
+  fromApiError,
+  Spinner,
+} from '@app/ui';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
+import { ArrowRight } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import { PlanTimeline } from '../../features/goal/PlanTimeline';
 import {
   BracketPicker,
@@ -11,48 +24,65 @@ import {
   type ScheduleValue,
   SkillRater,
 } from '../../features/goal/pickers';
+import { MentorNote, PlanFacts } from '../../features/goal/StudyPlan';
 import { api } from '../../lib/api';
 import { useDebounced } from '../../lib/hooks';
-import { setGoal, useCatalog, useGoal } from '../../lib/queries';
+import { setGoal, useCatalog, useGoal, useStudyPlan } from '../../lib/queries';
 
 export function PlanPage() {
   const goal = useGoal();
   const catalog = useCatalog();
-  if (goal.isPending || catalog.isPending) return <Spinner />;
-  if (goal.isError || catalog.isError)
-    return <Alert tone="bad">{errorMessage(goal.error ?? catalog.error)}</Alert>;
+  const studyPlan = useStudyPlan();
+  if (goal.isPending || catalog.isPending || studyPlan.isPending) return <Spinner />;
+  if (goal.isError || catalog.isError || studyPlan.isError)
+    return <Alert tone="bad">{errorMessage(goal.error ?? catalog.error ?? studyPlan.error)}</Alert>;
   if (!goal.data.goal) return <Alert tone="warn">Set your goal first.</Alert>;
+  const plan = studyPlan.data;
 
   return (
-    <div className="grid max-w-3xl gap-6 animate-rise">
+    <div className="grid max-w-3xl grid-cols-[minmax(0,1fr)] gap-6 animate-rise">
       <header>
         <span className="eyebrow">My plan</span>
-        <h1 className="mt-1.5 text-[clamp(24px,2.6vw,30px)]">Your target and your time</h1>
-        <p className="mt-1.5 text-muted">Change anything. Your progress is never lost.</p>
+        <h1 className="mt-1.5 text-[clamp(24px,2.6vw,30px)]">
+          {plan.studentsChooseSchedule ? 'Your target and your time' : 'Your study plan'}
+        </h1>
+        <p className="mt-1.5 text-muted">
+          {plan.studentsChooseSchedule
+            ? 'Change anything. Your progress is never lost.'
+            : 'Set by your mentors, the same for everyone in your batch. Show up on every study day and your roadmap does the rest.'}
+        </p>
       </header>
-      <TargetCard />
-      <ScheduleCard />
+      <TargetCard plan={plan} />
+      {plan.studentsChooseSchedule ? <ScheduleCard /> : <StudyPlanCard plan={plan} />}
       <SkillsCard />
     </div>
   );
 }
 
-function TargetCard() {
+function TargetCard({ plan }: { plan: StudentStudyPlan }) {
   const { data } = useGoal();
   const { data: catalog } = useCatalog();
   const g = data?.goal;
+  const choosePackage = plan.studentsChoosePackage;
   const [open, setOpen] = useState(false);
   const [roleId, setRoleId] = useState(g?.role.id);
   const [bracketId, setBracketId] = useState(g?.bracket.id);
   const change = useMutation({
-    mutationFn: () => api.post<GoalResponse>('/student/goal/target', { roleId, bracketId }),
+    mutationFn: () =>
+      api.post<GoalResponse>('/student/goal/target', {
+        roleId,
+        ...(choosePackage ? { bracketId } : {}),
+      }),
     onSuccess: (r) => {
       setGoal(r);
       setOpen(false);
     },
   });
   if (!g || !catalog) return null;
-  const changed = roleId !== g.role.id || bracketId !== g.bracket.id;
+  const liveRoles = catalog.roles.filter((r) => r.availability === 'LIVE').length;
+  // Nothing to switch to while there is one open role and the team picks the package.
+  const canChange = choosePackage || liveRoles > 1;
+  const changed = roleId !== g.role.id || (choosePackage && bracketId !== g.bracket.id);
 
   return (
     <Card className="p-6">
@@ -62,20 +92,30 @@ function TargetCard() {
           <div>
             <div className="eyebrow">Target</div>
             <b className="text-[17px]">
-              {g.role.title} · <span className="font-display">{g.bracket.label}</span>
+              {g.role.title}
+              {choosePackage && (
+                <>
+                  {' '}
+                  · <span className="font-display">{g.bracket.label}</span>
+                </>
+              )}
             </b>
           </div>
         </div>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setRoleId(g.role.id);
-            setBracketId(g.bracket.id);
-            setOpen(true);
-          }}
-        >
-          Change target
-        </Button>
+        {canChange ? (
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setRoleId(g.role.id);
+              setBracketId(g.bracket.id);
+              setOpen(true);
+            }}
+          >
+            Change target
+          </Button>
+        ) : (
+          <span className="text-[13px] text-muted">More roles open soon</span>
+        )}
       </div>
       <Dialog open={open} onClose={() => setOpen(false)} title="Change your target" wide>
         <div className="grid gap-6">
@@ -83,10 +123,16 @@ function TargetCard() {
             <h3 className="mb-3 text-[15px]">Role</h3>
             <RolePicker roles={catalog.roles} value={roleId} onChange={setRoleId} />
           </section>
-          <section>
-            <h3 className="mb-3 text-[15px]">Target package</h3>
-            <BracketPicker brackets={catalog.brackets} value={bracketId} onChange={setBracketId} />
-          </section>
+          {choosePackage && (
+            <section>
+              <h3 className="mb-3 text-[15px]">Target package</h3>
+              <BracketPicker
+                brackets={catalog.brackets}
+                value={bracketId}
+                onChange={setBracketId}
+              />
+            </section>
+          )}
           <Alert tone="info">
             A new target starts a fresh plan. Your old target stays in your history, and anything
             you have learned still counts.
@@ -102,6 +148,53 @@ function TargetCard() {
           </div>
         </div>
       </Dialog>
+    </Card>
+  );
+}
+
+/** The team's plan, read-only: their note, the daily target and how the roadmap plays out. */
+function StudyPlanCard({ plan }: { plan: StudentStudyPlan }) {
+  const { data } = useGoal();
+  const g = data?.goal;
+  const schedule = useMemo<ScheduleValue | null>(
+    () =>
+      g
+        ? { dailyMinutes: g.dailyMinutes, studyWeekdays: g.studyWeekdays, deadline: g.deadline }
+        : null,
+    [g],
+  );
+  const preview = useQuery({
+    queryKey: ['schedule-preview', schedule],
+    queryFn: () => api.post<SchedulePreviewResponse>('/student/roadmap/preview-schedule', schedule),
+    enabled: Boolean(schedule && schedule.studyWeekdays.length > 0),
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+  if (!g || !schedule) return null;
+
+  return (
+    <Card className="p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base">Your daily target</h2>
+        <Badge tone="next">Set by your mentors</Badge>
+      </div>
+      <p className="mt-1 text-sm text-muted">
+        Small, steady sessions beat weekend marathons. Missed a day? Re-plan from today on your
+        roadmap and pick up where you left off.
+      </p>
+      {plan.message && <MentorNote message={plan.message} className="mt-4" />}
+      <div className="mt-4">
+        <PlanFacts
+          dailyMinutes={g.dailyMinutes}
+          studyWeekdays={g.studyWeekdays}
+          deadline={g.deadline}
+          daysToDeadline={g.daysToDeadline}
+        />
+      </div>
+      <PlanTimeline preview={preview.data} loading={preview.isFetching} schedule={schedule} />
+      <Link to="/roadmap" className={cn(buttonClass('secondary', 'sm'), 'mt-5')}>
+        See it day by day <ArrowRight className="size-3.5" aria-hidden />
+      </Link>
     </Card>
   );
 }

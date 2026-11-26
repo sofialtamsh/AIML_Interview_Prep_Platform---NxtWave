@@ -4,6 +4,24 @@ import { useId, useMemo, useState } from 'react';
 import { chunkerVerdict, chunkWords, phraseSpan, wordsOf } from '../chunker';
 import { Rich } from '../rich';
 import { Verdict } from './code-sections';
+import {
+  ImputationExplorer,
+  OutlierExplorer,
+  PValueExplorer,
+  ScalingExplorer,
+} from './data-explorers';
+import { ActivationExplorer, OptimizerRace, TrainingExplorer } from './explorers';
+import { KnnLab } from './knn-lab';
+import { LinregLab } from './linreg-lab';
+import { LinregMultiLab } from './linreg-multi-lab';
+import { LogregLab } from './logreg-lab';
+import {
+  ArrayIndexExplorer,
+  AxisExplorer,
+  BroadcastExplorer,
+  MatmulExplorer,
+  VectorExplorer,
+} from './numpy-explorers';
 
 type WidgetSection = Extract<StudentSection, { kind: 'WIDGET' }>;
 
@@ -11,6 +29,38 @@ export function WidgetView({ s }: { s: WidgetSection }) {
   switch (s.body.widget) {
     case 'chunker':
       return <Chunker body={s.body} />;
+    case 'training-explorer':
+      return <TrainingExplorer body={s.body} />;
+    case 'optimizer-race':
+      return <OptimizerRace body={s.body} />;
+    case 'activation-explorer':
+      return <ActivationExplorer body={s.body} />;
+    case 'outlier-explorer':
+      return <OutlierExplorer body={s.body} />;
+    case 'imputation-explorer':
+      return <ImputationExplorer body={s.body} />;
+    case 'scaling-explorer':
+      return <ScalingExplorer body={s.body} />;
+    case 'pvalue-explorer':
+      return <PValueExplorer body={s.body} />;
+    case 'array-index-explorer':
+      return <ArrayIndexExplorer body={s.body} />;
+    case 'axis-explorer':
+      return <AxisExplorer body={s.body} />;
+    case 'broadcast-explorer':
+      return <BroadcastExplorer body={s.body} />;
+    case 'vector-explorer':
+      return <VectorExplorer body={s.body} />;
+    case 'matmul-explorer':
+      return <MatmulExplorer body={s.body} />;
+    case 'knn-lab':
+      return <KnnLab body={s.body} />;
+    case 'linreg-lab':
+      return <LinregLab body={s.body} />;
+    case 'linreg-multi':
+      return <LinregMultiLab body={s.body} />;
+    case 'logreg-lab':
+      return <LogregLab body={s.body} />;
     default:
       return null;
   }

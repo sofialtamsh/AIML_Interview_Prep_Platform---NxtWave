@@ -2,7 +2,7 @@ import type { StudentSection } from '@app/content';
 import type { LessonModuleResponse, LessonVersionResponse, SectionChange } from '@app/contracts';
 import { LessonRuntimeProvider, SectionBody, SectionHeader, sectionTitle } from '@app/learning-ui';
 import { Badge, Button, Card, Chip, cn, SelectField } from '@app/ui';
-import { MessageSquarePlus, Wand2 } from 'lucide-react';
+import { MessageSquarePlus, PanelLeftClose, PanelLeftOpen, Wand2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
   PRIOR_KNOWLEDGE,
@@ -17,6 +17,8 @@ const CHANGE_BADGE: Record<SectionChange, { label: string; tone: 'next' | 'warn'
   CHANGED: { label: 'Changed', tone: 'warn' },
   UNCHANGED: null,
 };
+
+const PANEL_KEY = 'admin.lesson-preview.panel';
 
 /** Picks a student profile to preview as: a curriculum target, or any depth. */
 export function useTargetPicker(module: LessonModuleResponse, initialIndex = 0) {
@@ -92,18 +94,54 @@ export function PreviewTab({
   onRewrite?: (key: string, title: string) => void;
 }) {
   const { value, label, picker } = useTargetPicker(module);
-  const runtime = useMemo(() => previewRuntime(v.document), [v.document]);
+  const runtime = useMemo(
+    () => previewRuntime(v.document, module.subtopic.topic.position),
+    [v.document, module.subtopic.topic.position],
+  );
   const preview = useMemo(() => resolvePreview(v.document, value, revisionMap(v)), [v, value]);
   const meta = new Map(v.document.sections.map((s) => [s.key, s]));
   const changes = new Map(v.sections.map((s) => [s.key, s.change]));
   const showChanges =
     module.publishedVersionId !== null && module.publishedVersionId !== v.version.id;
+  // The side panel (who to preview as, and the step list) can be hidden to give the lesson the
+  // full width, as a student sees it. The choice is remembered in this browser.
+  const [panel, setPanel] = useState(() => {
+    try {
+      return localStorage.getItem(PANEL_KEY) !== 'hidden';
+    } catch {
+      return true;
+    }
+  });
+  const togglePanel = () => {
+    setPanel((on) => {
+      try {
+        localStorage.setItem(PANEL_KEY, on ? 'hidden' : 'shown');
+      } catch {
+        // Private windows may refuse storage; the panel still toggles for this visit.
+      }
+      return !on;
+    });
+  };
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
-      <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4 lg:sticky lg:top-6 lg:self-start">
+    <div className={cn('grid gap-5', panel && 'lg:grid-cols-[17rem_minmax(0,1fr)]')}>
+      <aside
+        className={cn(
+          'grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4 lg:sticky lg:top-6 lg:self-start',
+          !panel && 'hidden',
+        )}
+      >
         <Card className="grid gap-4 p-4">
-          <span className="eyebrow">Preview as</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="eyebrow">Preview as</span>
+            <button
+              type="button"
+              onClick={togglePanel}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] font-semibold text-ink-2 hover:bg-surface-2"
+            >
+              <PanelLeftClose className="size-4" aria-hidden /> Hide panel
+            </button>
+          </div>
           {picker}
           <div className="rounded-xl bg-surface-2 px-3 py-2.5 text-[13px]">
             <b>{preview.sections.length} steps</b> · about {preview.minutes} min ·{' '}
@@ -131,7 +169,16 @@ export function PreviewTab({
       </aside>
 
       <LessonRuntimeProvider value={runtime}>
-        <div className="grid min-w-0 gap-5">
+        <div className={cn('grid min-w-0 gap-5', !panel && 'mx-auto w-full max-w-4xl')}>
+          {!panel && (
+            <button
+              type="button"
+              onClick={togglePanel}
+              className="inline-flex items-center gap-1.5 justify-self-start rounded-lg border border-line-2 bg-surface px-2.5 py-1.5 text-[12.5px] font-semibold text-ink-2 hover:border-brand"
+            >
+              <PanelLeftOpen className="size-4" aria-hidden /> Show preview options and steps
+            </button>
+          )}
           <Card className="dotgrid grid gap-2 p-5">
             <span className="eyebrow">Previewing as {label}</span>
             <h2 className="text-[24px]">{v.document.title}</h2>

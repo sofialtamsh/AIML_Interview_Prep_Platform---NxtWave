@@ -53,10 +53,12 @@ Section {
 
 | Kind | What the student experiences | Body (abridged) |
 |---|---|---|
-| `HOOK` | A relatable scenario or question that makes the concept feel needed. The simple idea comes before the formal one. | `{ scenario: Rich, provocation?: string, analogy?: { text, mapping: [{ everyday, technical }], whereItBreaks }, bridge: Rich }` |
+| `HOOK` | A simple real-world scenario (where the idea is used: an everyday app or situation) that makes the concept feel needed. The simple idea comes before the formal one; the interview question can follow in the bridge. | `{ scenario: Rich, animation?: AnimationRef, realWorld?: { title?, items: [{ icon: SlideIcon, label, sub? }] (2–4) }, provocation?: string, analogy?: { text, mapping: [{ everyday, technical }], whereItBreaks }, bridge: Rich }` |
 | `EXPLANATION` | Short paragraphs, step lists, terms and comparisons. Can include **inline choices** inside sentences (Mathigon-style). | `{ blocks: Block[] }`, see §5 |
 | `CARD_DECK` | Interactive cards: flip, expand, step through, compare | `{ layout: "flip"\|"stack"\|"stepper"\|"compare"\|"grid", cards: Card[] }` |
 | `DIAGRAM` | An SVG diagram with step-by-step highlights and narration | `{ type: "flow"\|"layers"\|"sequence"\|"cycle", nodes[], edges[], steps?: [{ title, narration, highlight: nodeIds[] }], caption, altText }` |
+| `VISUAL` | **An animated scene ("Watch it")** that plays by itself when it scrolls into view, with pause, step back/forward and replay. Respects reduced motion (no autoplay, instant transitions). Built 2026-11-06. | `{ scene: Scene, caption?, altText }`. `Scene` is one of: **`chat`**, a mock interview played message by message with typing dots, coach notes (`ok`/`bad`/`info`) and up to 3 switchable takes, each with a closing verdict: `{ interviewer, candidate, takes: [{ label, tone, messages: [{ from, text, note? }], verdict? }] }`. **`anatomy`**, one passage split into 2–5 colour-coded parts that light up in order, with a note per part and an optional timeline when every part has `seconds`: `{ heading?, parts: [{ label, text, note?, seconds? }] }`. **`array`**, a row of up to 16 short values that changes frame by frame (highlights, pointers under cells, labels in the gaps between cells, a window under a range, new values): `{ label?, cells[], frames: [{ title, narration, values?, highlight[], tone, pointers[], gaps[], window? }] }`. More scene types (charts, matrices, networks) are added as topics need them. |
+| `SLIDES` | **A PPT-style deck ("Slides")**, the main teaching step since 2026-11-09. One idea per slide; the headline, body, bullets and visual build in one by one; slides glide in, can be swiped or moved with the arrow keys, and can go full screen. Up to four slides carry an ungraded try-it. | `{ slides: [{ kicker?, title, body?, points[≤4], visual?, animation?, try?, note?, accent? }] }`. `animation` (an `AnimationRef`) puts a moving picture beside the headline; a code or other visual then sits full width below it. The deck has a play mode: it advances by itself (reading time, or the device voice reading the slide aloud) and stops at each try-it. `visual`: `icons` · `emoji` · `stat` · `flow` · `sequence` (terms with a step label between neighbours, e.g. a number series; the last can be the answer) · `compare` (better: left/right/none) · `code` (≤14 lines + output) · `chat` · `checklist` · `quote`. `try`: `choice` (options with feedback) · `write` (then a sample) · `code` (edit and run; `expected` text in the output). |
 | `CODE_EXAMPLE` | Highlighted code with line annotations and an optional **Run** button (Pyodide) | `{ language, code, annotations: [{ lines:[a,b], note }], runnable, packages[], expectedOutput? }` |
 | `CODE_EXPLORER` | **The prototype's signature interaction.** Change toggles or sliders and watch the code, the output table and the verdict update. Bug vs fix, `inner` vs `left`, sort direction × keep. | see §6 |
 | `WIDGET` | A vetted interactive simulation from the registry (chunk-size slider, RRF fusion, latency budget, loss/threshold explorer…) | `{ widget: WidgetType, params: <per-widget Zod schema>, prompt?: Rich, verdicts?: [...] }`, see §7 |
@@ -66,6 +68,29 @@ Section {
 | `CALLOUT` | Small, high-signal notes | `{ tone: "interview_tip"\|"misconception"\|"pitfall"\|"real_world"\|"remember"\|"analogy_vs_reality", title, body: Rich }` |
 | `INTERVIEW_PLAYBOOK` | How to structure the interview answer (e.g. a 45-minute plan) plus follow-ups to expect | `{ totalMinutes, steps: [{ title, minutes, detail }], followUps: string[] }` |
 | `SUMMARY` | Key takeaways, what to remember, objectives met, what's next | `{ takeaways: Rich[], remember: string[], objectivesCheck: [{ objectiveKey, sectionKeys[] }], next?: { label, target } }` |
+
+
+### Moving pictures (`AnimationRef`)
+
+`{ name, caption? }`, where `name` is one of the platform's animation library (`ANIMATIONS` in
+`packages/content/src/animations.ts`; drawn by `packages/learning-ui/src/animations.tsx`). They
+are small looping SVG diagrams in the theme's colours and type: clean and technical, no emoji or
+cartoon art, still when the student prefers reduced motion. Each name's description is what
+screen readers hear. A caption like "Real use: …" ties the picture to where the idea is used.
+Current library: Python (`name-tags`, `list-vs-tuple`, `set-dedupe`, `dict-lookup`,
+`function-machine`, `decorator-wrap`, `comprehension-filter`, `generator-belt`, `try-except-net`,
+`async-waiter`, `gil-baton`), Python OOP (`class-blueprint`, `self-binding`, `inheritance-tree`,
+`polymorphism-pay`, `encapsulation-wallet`, `abstraction-panel`, `class-vs-instance`), interviews and HR (`intro-trailer`, `star-timeline`, `ctc-split`) and
+machine learning (`scatter-line`, `residuals`, `loss-bowl`, `learning-rate`, `train-test-split`,
+`overfit-underfit`, `labels-vs-no-labels`, `decision-boundary`, `clusters`, `neuron`, `network`,
+`activation-curves`) and deep learning (`forward-backward`, `optimizer-paths`, `dropout-net`,
+`early-stopping`, `batch-norm`, `vanishing-gradient`, `conv-filter`, `max-pool`, `cnn-pipeline`,
+`feature-hierarchy`, `transfer-learning`, `iou-boxes`, `nms-boxes`) and NLP (`review-sorter`,
+`token-pipeline`, `stem-vs-lemma`, `bag-of-words`, `tfidf-weights`, `embedding-space`,
+`word-analogy`, `seq-vs-parallel`, `rnn-unroll`, `lstm-gates`, `attention-weights`, `qkv-lookup`,
+`multi-head`, `transformer-blocks`, `bert-vs-gpt`, `causal-mask`) and LLMs (`next-token-loop`,
+`tokenizer-split`, `context-window`, `llm-training-stages`, `genai-types`, `bpe-merges`). Adding one means a description in `animations.ts` and a drawing in
+`animations.tsx` (a test fails until both exist).
 
 ## 5. Rich text and blocks
 
@@ -101,6 +126,20 @@ Widgets are React components written and tested by developers. Generated content
 | `slider-tradeoff` | Two metrics moving against each other as a parameter changes | parameter range, two series (formula from an allow-listed set or point table), labels, target |
 | `pipeline-stages` | A data or ML pipeline stage by stage (raw → split → explode → count) | stages: [{ label, code, outputTable }] |
 | `chunker` | Chunk size and overlap vs context loss | sample text, size and overlap ranges, highlight phrase |
+| `training-explorer` *(built 2026-11-18)* | Learning rate, epochs, overfitting, early stopping, L2: a polynomial trained live by gradient descent, with training/validation loss per epoch (log scale) and the fit drawn over the data | degree, learning-rate and L2 option lists with defaults, epochs max/default, seed, points, noise, up to 4 "Try this" tasks |
+| `optimizer-race` *(built 2026-11-18)* | SGD vs momentum vs Adam on the same narrow valley | optimizers, learning-rate and momentum options, steps, optional mini-batch noise, tasks |
+| `activation-explorer` *(built 2026-11-18)* | Sigmoid, tanh, ReLU and leaky ReLU of w·x + b, with the slope and vanishing-gradient zones shaded | functions, default, showSlope, tasks |
+| `outlier-explorer` *(built 2026-11-18)* | One column on a number line with its box: flag outliers by the IQR rule or z-scores, then keep, remove or cap them; mean, median and spread before and after | label, values, extra (a draggable value), methods, defaultMethod, iqrK, zThreshold, treatments, tasks |
+| `imputation-explorer` *(built 2026-11-18)* | A column with gaps, row by row: fill by dropping, mean, median, mode, forward or backward fill, or interpolation, and compare the summary | datasets (1–3, values with nulls, ordered), strategies, defaultStrategy, tasks |
+| `scaling-explorer` *(built 2026-11-18)* | Two features on different scales and a k-nearest-neighbours model: no scaling, min-max or standardisation, the neighbourhood, each feature's share of the distance and the prediction | xLabel, yLabel, classes, points, queryX, queryY, k, scalers, defaultScaler, tasks |
+| `pvalue-explorer` *(built 2026-11-18)* | An exact two-sided binomial test against 50/50: the null distribution, the tails that make p, and the decision at α | trialsLabel, successLabel, n, defaultShare, alpha, tasks |
+| `array-index-explorer` *(built 2026-11-18)* | A small NumPy array as a grid: slice rows and columns (all, a slice or one index), mask cells above a value, or filter rows on one column; shows the expression, picked cells, printout, shape, and view vs copy | name, rowLabel, colLabel, rowNames, colNames, values, modes, defaultMode, threshold, tasks |
+| `axis-explorer` *(built 2026-11-18)* | sum, mean, max, min or argmax with axis None, 0 or 1 and keepdims; cells that collapse together share a colour | name, rowLabel, colLabel, rowNames, colNames, values, ops, defaultOp, tasks |
+| `broadcast-explorer` *(built 2026-11-18)* | Two preset shapes lined up from the right, axis by axis: the stretched copies, A + B, or NumPy's exact error | shapes, defaultA, defaultB, tasks |
+| `vector-explorer` *(built 2026-11-18)* | Two 2-D vectors on a grid: dot product, L1 and L2 norms, cosine, angle and distance, optionally at length 1 | range, a, b, tasks |
+| `linreg-lab` *(built 2026-11-19)* | The guided lab for linear regression: `story` steps beside one live picture (points, a line with draggable handles, residuals, squared errors, a marked prediction), live MSE, RMSE, MAE and R², a table that works out every prediction and residual, the closed-form least-squares working, gradient descent one step at a time on raw or standardised x with a loss chart, and a residual plot. Datasets: the lesson's points, the same with an outlier, and generated curved and funnel patterns. Numbers match NumPy and scikit-learn | story (kicker, title, body, show, line, best, dataset, panel, learningRate, scaled, steps, predict); params: xLabel, yLabel, xName, yName, points, outlier, xRange, yRange, line, slope, intercept, datasets, defaultDataset, learningRates, scaledLearningRates, panels, controls, tasks |
+| `knn-lab` *(built 2026-11-19)* | The V1 guided lab: up to ten `story` steps beside one live KNN picture (points, the draggable new point, every distance with its working, the K nearest, plain or distance-weighted votes with their arithmetic, ties, decision regions, accuracy against K on held-out points), then a free sandbox. Numbers follow scikit-learn | story (kicker, title, body, show, k, weighted, boundary, metric, query, dataset); params: xLabel, yLabel, classes, points, datasets, defaultDataset, query, k, metrics, defaultMetric, weighted, boundary, panels, controls, tasks |
+| `matmul-explorer` *(built 2026-11-18)* | Two named tables: pick a result cell to see its row times column; switch to B @ A, A @ A, A @ A.T or A * B to see order, clashes and * vs @ | aName, bName, rowNames, innerNames, colNames, a, b, ops, defaultOp, tasks |
 | `similarity-playground` | Cosine vs dot product vs Euclidean, the effect of normalization | 2–6 small vectors (2-D for plotting) and their labels |
 | `vector-space-2d` | Nearest neighbours, query vs documents | points with labels, query point, k range |
 | `rank-compare` | Embeddings vs BM25 vs hybrid ranking lists | ranked lists, correct item |

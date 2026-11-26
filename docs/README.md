@@ -12,5 +12,7 @@ Start with **[01 · Product requirements](01-product-requirements.md)**, then **
 8. [UI/UX strategy](08-ux-strategy.md)
 9. [Delivery plan, testing strategy, risks](09-delivery-plan.md)
 10. [Gap analysis](10-gap-analysis.md)
+11. [ML Engineer interview evidence](11-mle-interview-evidence.md)
+12. [V1 scope: ML only, one algorithm at a time, in depth](12-v1-ml-scope.md) (the current plan)
 
 [Progress tracker and phase reports](PROGRESS.md)

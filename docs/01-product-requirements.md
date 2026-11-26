@@ -84,6 +84,18 @@ The architecture supports every role and bracket. Initial **data and generation*
 
 > The final pilot topics must be confirmed by an admin. They can be validated or replaced using the Research Agent once it is built.
 
+#### Pilot v2: ML Engineer first (manager decision, 2026-11-05)
+This narrows §4.1 for the first rollout to the students who cleared the NxtWave assessments:
+
+| Decision | What the platform does |
+|---|---|
+| **One role: ML Engineer.** | ML Engineer is the only live role. AI Engineer becomes *Next up*; the others stay *Planned*. Students still see them, with *Notify me*. |
+| **No package choice for now.** | The package step is hidden. The team places every student in one package (admin → Study plan; default 3–6 LPA). Nothing package-related shows on student screens. |
+| **No self-chosen study time for now.** | The time step and the schedule editor are hidden. The team sets one plan for everyone: daily minutes, study days, a deadline (a date, or N days after joining; default 60 min, Mon–Sat, 30 days) and a note. Students see it on Home and My plan, and can still re-plan from today when they fall behind. |
+| **Hidden, not removed.** | Both pickers stay in the code. An admin switches them back on in Study plan → *What students choose themselves*. |
+| **Practice links out.** | A Practice tab (after My plan) lists questions curated by admins. *Solve* opens the question on the NxtWave learning portal (CCBP) in a new tab, where students sign in with their NxtWave account. Clicks are counted per question. |
+| **Topics come from hiring data.** | The ML Engineer curriculum reuses the three built topics as an interim track, with GenAI treated as an extra on top of core ML. The full MLE topic list (ML, deep learning, NLP, computer vision, coding round, project explanation) is derived from the hiring-intelligence dashboard, not generated. |
+
 ### 4.2 Not in the MVP (designed for, built later)
 Full adaptive practice engine · mock interviews · AI interview/answer evaluation · coding assessments with server-side grading · top-10 student ranking · predictive analytics · the remaining roles and brackets' content.
 

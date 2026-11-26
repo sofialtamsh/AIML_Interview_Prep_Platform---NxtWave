@@ -1,0 +1,84 @@
+# Render blueprint: the API (with the background jobs inside it) and its Postgres database.
+# The student and admin apps are on Vercel (apps/student/vercel.json, apps/admin/vercel.json).
+# Step-by-step guide: docs/13-deployment.md
+#
+# Every value marked `sync: false` is asked for once, in the Render dashboard, when the blueprint
+# is created. Secrets are never written in this file.
+
+databases:
+  - name: nxtwave-prep-db
+    databaseName: prep
+    plan: basic-256mb
+    region: singapore
+    postgresMajorVersion: "17"
+
+services:
+  - type: web
+    name: nxtwave-prep-api
+    runtime: node
+    plan: starter
+    region: singapore
+    # Dev dependencies (Prisma, the bundler) are needed to build, so --prod=false.
+    buildCommand: >-
+      npx --yes pnpm@11.20.0 install --frozen-lockfile --prod=false --filter @app/api... &&
+      npx --yes pnpm@11.20.0 --filter @app/api build
+    # Database migrations run before each new version goes live.
+    preDeployCommand: cd apps/api && npx prisma migrate deploy
+    startCommand: node apps/api/dist/main.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "24"
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: "10000"
+      # Requests arrive through Vercel and Render's proxy: read the student's IP from them.
+      - key: TRUST_PROXY
+        value: "true"
+      # One server sends email and runs the nightly clean-up itself (no separate worker).
+      - key: RUN_JOBS_IN_API
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nxtwave-prep-db
+          property: connectionString
+      # The two Vercel addresses, e.g. https://prep.example.com and https://admin.prep.example.com
+      - key: STUDENT_APP_URL
+        sync: false
+      - key: ADMIN_APP_URL
+        sync: false
+      - key: APP_NAME
+        value: NxtWave Prep
+      # Email through Brevo's SMTP relay (docs/13-deployment.md, step 6).
+      - key: SMTP_HOST
+        value: smtp-relay.brevo.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      # A sender address on your own domain, verified in Brevo, e.g. NxtWave Prep <no-reply@prep.example.com>
+      - key: MAIL_FROM
+        sync: false
+      - key: REGISTRATION_POLICY_DEFAULT
+        value: OPEN
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "false"
+      # "Continue with Google" (docs/13-deployment.md, step 7).
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: ADMIN_GOOGLE_ALLOWED_DOMAINS
+        value: nxtwave.co.in
+      # AI content agents stay off until a key is added.
+      - key: AI_PROVIDER
+        value: auto
+      - key: ANTHROPIC_API_KEY
+        sync: false

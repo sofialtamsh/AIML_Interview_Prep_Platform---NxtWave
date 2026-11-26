@@ -1,4 +1,4 @@
-import { depthReport, LessonDocument, type Section } from '@app/content';
+import { depthReport, internalDataIssues, LessonDocument, type Section } from '@app/content';
 import type {
   ColorKey,
   CreateLessonVersionBody,
@@ -30,6 +30,7 @@ import {
   loadSections,
   parseDocument,
   parseSection,
+  topicPosition,
   writeSections,
 } from './lesson-store.ts';
 
@@ -175,6 +176,7 @@ export class ContentService {
           slug: subtopic.topic.slug,
           title: subtopic.topic.title,
           iconKey: subtopic.topic.iconKey,
+          position: await topicPosition(this.db, subtopic.topic),
         },
       },
       targets: targets.get(subtopicId) ?? [],
@@ -530,6 +532,16 @@ export class ContentService {
       if (v.status !== 'APPROVED') {
         throw wrongStatus(v.status, 'publish it', 'Only approved versions can be published.');
       }
+      // Interview data steers what we teach; students never see it quoted.
+      const leaks = (await loadSections(tx, id)).flatMap((s) => internalDataIssues(s.section));
+      if (leaks.length) {
+        throw invalidContent(
+          leaks.map((l) => ({ path: l.sectionKey, message: l.message })),
+          `Students can't see internal interview data, and this lesson quotes it in ${leaks
+            .map((l) => `"${l.sectionKey}"`)
+            .join(', ')}. Remove it in a new draft, then publish.`,
+        );
+      }
       const previous = await tx.moduleVersion.findFirst({
         where: { moduleId: v.moduleId, status: 'PUBLISHED' },
       });
@@ -590,6 +602,42 @@ export class ContentService {
       ip: actor.ip,
     });
     return this.version(id);
+  }
+
+  /**
+   * Deletes an old version for good, so a lesson's history stays readable. Only history can go:
+   * the version students see, one still being worked on, and one a student has progress on all
+   * stay. The section text is kept, because later versions share every revision they did not
+   * change, and a student's answers hang off those revisions.
+   */
+  async remove(id: string, actor: Actor) {
+    const gone = await this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM module_version WHERE id = ${id}::uuid FOR UPDATE`;
+      const v = await tx.moduleVersion.findUnique({ where: { id } });
+      if (!v) throw notFound('That lesson version');
+      if (v.status !== 'SUPERSEDED' && v.status !== 'ARCHIVED') {
+        throw wrongStatus(v.status, 'delete it');
+      }
+      const learners = await tx.moduleProgress.count({ where: { moduleVersionId: id } });
+      if (learners > 0) {
+        throw new AppError(
+          'CONFLICT',
+          `${learners} ${learners === 1 ? 'student has' : 'students have'} progress on this version, so it stays.`,
+          { learners },
+        );
+      }
+      await tx.moduleVersion.delete({ where: { id } });
+      return { moduleId: v.moduleId, versionNumber: v.versionNumber, status: v.status };
+    });
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'content.lesson.version_removed',
+      entityType: 'module_version',
+      entityId: id,
+      before: gone,
+      ip: actor.ip,
+    });
+    return { ok: true as const };
   }
 
   // ───────────── AI drafts and rewrites (written by the worker) ─────────────

@@ -40,7 +40,7 @@ import {
   TRIGGER_LABEL,
 } from '../../features/roadmap/parts';
 import { api } from '../../lib/api';
-import { setRoadmap, useGoal, useRoadmap } from '../../lib/queries';
+import { setRoadmap, useGoal, useRoadmap, useStudyPlan } from '../../lib/queries';
 
 const VIEWS = [
   { id: 'journey', label: 'Journey' },
@@ -58,6 +58,7 @@ function spareLabel(days: number | null) {
 export function RoadmapPage() {
   const roadmap = useRoadmap();
   const goal = useGoal();
+  const { data: plan } = useStudyPlan();
   const [view, setView] = useState<ViewId>('journey');
   const replan = useMutation({
     mutationFn: () => api.post<RoadmapResponse>('/student/roadmap/replan'),
@@ -70,6 +71,9 @@ export function RoadmapPage() {
   if (status !== 'READY' || !r) return <NotReady status={status} />;
 
   const g = goal.data?.goal;
+  // While the team sets time and package, they show as facts, not as things to change.
+  const chooseSchedule = plan?.studentsChooseSchedule ?? false;
+  const showPackage = plan?.studentsChoosePackage ?? false;
   const days = g
     ? WEEKDAYS.filter((w) => g.studyWeekdays.includes(w.day))
         .map((w) => w.short)
@@ -77,14 +81,20 @@ export function RoadmapPage() {
     : '';
 
   return (
-    <div className="grid gap-6 animate-rise">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 animate-rise">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <span className="eyebrow">Your roadmap</span>
           <div className="mt-2 flex items-center gap-3">
             <RoleBadge code={r.role.shortCode} color={r.role.colorKey} size={44} />
             <h1 className="text-[clamp(22px,2.8vw,32px)]">
-              {r.role.title} · <span className="whitespace-nowrap">{r.bracket.label}</span>
+              {r.role.title}
+              {showPackage && (
+                <>
+                  {' '}
+                  · <span className="whitespace-nowrap">{r.bracket.label}</span>
+                </>
+              )}
             </h1>
           </div>
           <p className="mt-2 max-w-[62ch] text-ink-2">
@@ -99,7 +109,7 @@ export function RoadmapPage() {
           </p>
         </div>
         <Link to="/plan" className={buttonClass('secondary', 'sm')}>
-          Change my time
+          {chooseSchedule ? 'Change my time' : 'See my plan'}
         </Link>
       </header>
 
@@ -117,7 +127,7 @@ export function RoadmapPage() {
       </div>
 
       {proposal && <ProposalBanner proposal={proposal} />}
-      {r.feasibility && <FeasibilityCard feasibility={r.feasibility} />}
+      {r.feasibility && <FeasibilityCard feasibility={r.feasibility} readOnly={!chooseSchedule} />}
       {r.totals.delayed > 0 && (
         <Alert
           tone="warn"
@@ -168,7 +178,7 @@ export function RoadmapPage() {
       </div>
 
       {view === 'journey' ? (
-        <ol className="grid gap-4" aria-label="Topics in order">
+        <ol className="grid grid-cols-[minmax(0,1fr)] gap-4" aria-label="Topics in order">
           {r.topics.map((t, i) => (
             <TopicBlock key={t.id} topic={t} index={i} last={i === r.topics.length - 1} />
           ))}
@@ -233,7 +243,7 @@ function WeekView({ weeks, topics }: { weeks: WeekPlanDto[]; topics: RoadmapTopi
     );
   }
   return (
-    <ol className="grid gap-3" aria-label="Weeks">
+    <ol className="grid grid-cols-[minmax(0,1fr)] gap-3" aria-label="Weeks">
       {weeks.map((w) => {
         const now = today >= w.start && today <= w.end;
         return (
@@ -307,7 +317,7 @@ function TopicBlock({
   const range = formatRange(topic.plannedStart, topic.plannedEnd);
   const allDone = topic.doneCount === topic.items.length;
   return (
-    <li className="relative grid grid-cols-[40px_1fr] gap-3 sm:grid-cols-[48px_1fr] sm:gap-4">
+    <li className="relative grid grid-cols-[40px_minmax(0,1fr)] gap-3 sm:grid-cols-[48px_minmax(0,1fr)] sm:gap-4">
       <div className="relative flex justify-center">
         <span
           className={cn(
@@ -370,6 +380,20 @@ function ItemRow({ item }: { item: RoadmapItemDto }) {
               <span>{formatMinutes(item.estimatedMinutes)}</span>
               {range && <span>{range}</span>}
             </div>
+            {/* The roadmap is a map: each unit shows the subtopics it covers, at a glance. What
+                the student will be able to do afterwards opens the lesson itself. */}
+            {item.concepts.length > 0 && (
+              <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Covered in this unit">
+                {item.concepts.map((c) => (
+                  <li
+                    key={c}
+                    className="rounded-md border border-line bg-surface-2 px-2 py-0.5 text-[12px] text-ink-2"
+                  >
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <ChevronDown
             className="mt-1 size-4 shrink-0 text-muted transition group-open:rotate-180"
@@ -378,21 +402,6 @@ function ItemRow({ item }: { item: RoadmapItemDto }) {
         </summary>
         <div className="px-4 pb-4 pl-12 sm:px-5 sm:pl-13">
           <p className="text-[13.5px] text-ink-2">{item.summary}</p>
-          {item.objectives.length > 0 && (
-            <>
-              <div className="eyebrow mt-3">You will be able to</div>
-              <ul className="mt-1.5 grid gap-1 text-[13.5px]">
-                {item.objectives.map((o) => (
-                  <li key={o} className="flex gap-2">
-                    <span className="text-brand" aria-hidden>
-                      ✓
-                    </span>
-                    {o}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
           <Link
             to={`/topics/${item.topicSlug}`}
             className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-brand hover:underline"

@@ -12,24 +12,29 @@
 import type { Db } from '../../db/prisma.ts';
 import type { Priority } from '../../generated/prisma/enums.ts';
 
-type ConceptSeed = [key: string, name: string];
-type SubtopicSeed = {
+export type ConceptSeed = [key: string, name: string];
+export type SubtopicSeed = {
   slug: string;
   title: string;
   summary: string;
   complexity: number;
-  /** "topic-slug/subtopic-slug" */
+  /** "topic-slug/subtopic-slug" (any subtopic in the taxonomy, not only this seed list) */
   needs: string[];
   concepts: ConceptSeed[];
+  /** Defaults to its position × 10. */
+  sortOrder?: number;
 };
-type TopicSeed = {
+export type TopicSeed = {
   slug: string;
   title: string;
   summary: string;
   iconKey: string;
-  skillArea: string;
+  /** Skill area slug used for self-rating fast-track; null for topics no self-check covers. */
+  skillArea: string | null;
   needs: string[];
   subtopics: SubtopicSeed[];
+  /** Defaults to its position × 10. Topic order is global: it orders every role's roadmap. */
+  sortOrder?: number;
 };
 
 export const PILOT_TOPICS: TopicSeed[] = [
@@ -188,19 +193,25 @@ export const PILOT_TOPICS: TopicSeed[] = [
   },
 ];
 
-type ItemSeed = {
+export type ItemSeed = {
   depth: 1 | 2 | 3 | 4 | 5;
   priority: Priority;
   optional?: boolean;
   objectives: string[];
   implementation?: string;
   rationale: string;
+  /**
+   * Minutes this unit really takes, which replaces the planner's estimate from depth and
+   * complexity. Set it to the lesson's own measured length: a guided lab unit runs far longer
+   * than the depth alone suggests, and a plan that understates that is a plan students miss.
+   */
+  estimateMinutes?: number;
 };
 
 /** "topic-slug/subtopic-slug" → what this package needs. */
-type CurriculumSeed = Record<string, ItemSeed>;
+export type CurriculumSeed = Record<string, ItemSeed>;
 
-const LPA_3_6: CurriculumSeed = {
+export const LPA_3_6: CurriculumSeed = {
   'python-numpy/numpy-arrays-vectorization': {
     depth: 3,
     priority: 'HIGH',
@@ -306,7 +317,7 @@ const LPA_3_6: CurriculumSeed = {
   },
 };
 
-const LPA_8_12: CurriculumSeed = {
+export const LPA_8_12: CurriculumSeed = {
   'python-numpy/numpy-arrays-vectorization': {
     depth: 3,
     priority: 'MEDIUM',
@@ -419,15 +430,23 @@ export const PILOT_CHANGE_NOTE =
 
 /** Inserts the pilot topics and the two pilot curricula if they are missing. */
 export async function bootstrapPilotCurriculum(db: Db) {
-  const created = { topics: 0, subtopics: 0, concepts: 0, curricula: 0 };
+  const taxonomy = await insertTaxonomy(db, PILOT_TOPICS);
+  const curricula = await createMissingCurricula(db, PILOT_CURRICULA, PILOT_CHANGE_NOTE);
+  return { ...taxonomy, curricula };
+}
+
+/**
+ * Inserts the topics, subtopics and concepts that are missing (matched by slug / key). A seed
+ * can add subtopics to a topic that already exists. Existing rows are never changed, and
+ * prerequisites are only written for rows created now (an admin may have changed the others).
+ */
+export async function insertTaxonomy(db: Db, seeds: TopicSeed[]) {
+  const created = { topics: 0, subtopics: 0, concepts: 0 };
   const areas = new Map((await db.skillArea.findMany()).map((a) => [a.slug, a.id]));
+  const newTopics: Array<{ id: string; seed: TopicSeed }> = [];
+  const newSubtopics: Array<{ id: string; seed: SubtopicSeed }> = [];
 
-  const topicIds = new Map<string, string>();
-  const subtopicIds = new Map<string, string>();
-  const newTopics: TopicSeed[] = [];
-  const newSubtopics: Array<{ key: string; seed: SubtopicSeed }> = [];
-
-  for (const [ti, t] of PILOT_TOPICS.entries()) {
+  for (const [ti, t] of seeds.entries()) {
     let topic = await db.topic.findUnique({ where: { slug: t.slug } });
     if (!topic) {
       topic = await db.topic.create({
@@ -436,17 +455,15 @@ export async function bootstrapPilotCurriculum(db: Db) {
           title: t.title,
           summary: t.summary,
           iconKey: t.iconKey,
-          skillAreaId: areas.get(t.skillArea) ?? null,
-          sortOrder: (ti + 1) * 10,
+          skillAreaId: t.skillArea ? (areas.get(t.skillArea) ?? null) : null,
+          sortOrder: t.sortOrder ?? (ti + 1) * 10,
         },
       });
       created.topics++;
-      newTopics.push(t);
+      newTopics.push({ id: topic.id, seed: t });
     }
-    topicIds.set(t.slug, topic.id);
 
     for (const [si, s] of t.subtopics.entries()) {
-      const key = `${t.slug}/${s.slug}`;
       let sub = await db.subtopic.findUnique({
         where: { topicId_slug: { topicId: topic.id, slug: s.slug } },
       });
@@ -458,13 +475,12 @@ export async function bootstrapPilotCurriculum(db: Db) {
             title: s.title,
             summary: s.summary,
             complexity: s.complexity,
-            sortOrder: (si + 1) * 10,
+            sortOrder: s.sortOrder ?? (si + 1) * 10,
           },
         });
         created.subtopics++;
-        newSubtopics.push({ key, seed: s });
+        newSubtopics.push({ id: sub.id, seed: s });
       }
-      subtopicIds.set(key, sub.id);
 
       for (const [ci, [conceptKey, name]] of s.concepts.entries()) {
         if (await db.concept.findUnique({ where: { key: conceptKey } })) continue;
@@ -476,25 +492,43 @@ export async function bootstrapPilotCurriculum(db: Db) {
     }
   }
 
-  // Prerequisites only for rows created just now (an admin may have changed the others).
-  for (const t of newTopics) {
-    const id = topicIds.get(t.slug) as string;
-    const data = t.needs
+  // Prerequisites can point anywhere in the taxonomy, so look them up across all of it.
+  const [topics, subtopics] = await Promise.all([
+    db.topic.findMany({ select: { id: true, slug: true } }),
+    db.subtopic.findMany({ select: { id: true, slug: true, topic: { select: { slug: true } } } }),
+  ]);
+  const topicIds = new Map(topics.map((t) => [t.slug, t.id]));
+  const subtopicIds = new Map(subtopics.map((s) => [`${s.topic.slug}/${s.slug}`, s.id]));
+  for (const { id, seed } of newTopics) {
+    const data = seed.needs
       .map((slug) => topicIds.get(slug))
-      .filter((p): p is string => !!p)
+      .filter((p): p is string => !!p && p !== id)
       .map((prerequisiteId) => ({ topicId: id, prerequisiteId }));
     if (data.length) await db.topicPrerequisite.createMany({ data, skipDuplicates: true });
   }
-  for (const { key, seed } of newSubtopics) {
-    const id = subtopicIds.get(key) as string;
+  for (const { id, seed } of newSubtopics) {
     const data = seed.needs
       .map((k) => subtopicIds.get(k))
-      .filter((p): p is string => !!p)
+      .filter((p): p is string => !!p && p !== id)
       .map((prerequisiteId) => ({ subtopicId: id, prerequisiteId }));
     if (data.length) await db.subtopicPrerequisite.createMany({ data, skipDuplicates: true });
   }
+  return created;
+}
 
-  for (const c of PILOT_CURRICULA) {
+/**
+ * Publishes each role × package curriculum that does not exist yet (any status counts as
+ * existing, so admin work is never overwritten). Items whose subtopic is missing are skipped.
+ * Returns how many curricula were created.
+ */
+export async function createMissingCurricula(
+  db: Db,
+  defs: Array<{ role: string; bracket: string; items: CurriculumSeed }>,
+  changeNote: string,
+): Promise<number> {
+  const subtopicIds = await subtopicKeyMap(db);
+  let created = 0;
+  for (const c of defs) {
     const [role, bracket] = await Promise.all([
       db.careerRole.findUnique({ where: { slug: c.role } }),
       db.packageBracket.findUnique({ where: { code: c.bracket } }),
@@ -510,27 +544,39 @@ export async function bootstrapPilotCurriculum(db: Db) {
         version: 1,
         status: 'PUBLISHED',
         publishedAt: new Date(),
-        changeNote: PILOT_CHANGE_NOTE,
-        items: {
-          create: Object.entries(c.items).flatMap(([key, i]) => {
-            const subtopicId = subtopicIds.get(key);
-            if (!subtopicId) return [];
-            return [
-              {
-                subtopicId,
-                priority: i.priority,
-                targetDepthRank: i.depth,
-                isOptional: i.optional ?? false,
-                learningObjectives: i.objectives,
-                implementationExpectation: i.implementation ?? null,
-                rationale: i.rationale,
-              },
-            ];
-          }),
-        },
+        changeNote,
+        items: { create: curriculumItemRows(subtopicIds, c.items) },
       },
     });
-    created.curricula++;
+    created++;
   }
   return created;
+}
+
+/** "topic-slug/subtopic-slug" → subtopic id, across the whole taxonomy. */
+export async function subtopicKeyMap(db: Db) {
+  const subtopics = await db.subtopic.findMany({
+    select: { id: true, slug: true, topic: { select: { slug: true } } },
+  });
+  return new Map(subtopics.map((s) => [`${s.topic.slug}/${s.slug}`, s.id]));
+}
+
+/** Curriculum item rows for a seed; items whose subtopic does not exist are skipped. */
+export function curriculumItemRows(subtopicIds: Map<string, string>, items: CurriculumSeed) {
+  return Object.entries(items).flatMap(([key, i]) => {
+    const subtopicId = subtopicIds.get(key);
+    if (!subtopicId) return [];
+    return [
+      {
+        subtopicId,
+        priority: i.priority,
+        targetDepthRank: i.depth,
+        isOptional: i.optional ?? false,
+        learningObjectives: i.objectives,
+        implementationExpectation: i.implementation ?? null,
+        estimateMinutesOverride: i.estimateMinutes ?? null,
+        rationale: i.rationale,
+      },
+    ];
+  });
 }

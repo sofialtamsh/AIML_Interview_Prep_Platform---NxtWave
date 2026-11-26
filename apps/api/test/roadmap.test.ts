@@ -444,7 +444,7 @@ describe('topic page', () => {
     expect(page.depthNote).toContain('8–12 LPA AI Engineer');
     expect(page.depthNote).toContain('Advanced');
     expect(page.learn).toEqual({ available: false, lessons: 0, completed: 0 });
-    expect(page.practice).toEqual({ available: false, questions: 0, notifyMe: false });
+    expect(page.practice).toEqual({ available: false, questions: 0, items: [], notifyMe: false });
 
     await b.post('/api/v1/student/interest', {
       kind: 'TOPIC',

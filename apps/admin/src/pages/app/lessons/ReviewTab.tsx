@@ -25,7 +25,7 @@ export function ReviewTab({
     module.publishedVersionId !== null && module.publishedVersionId !== v.version.id;
 
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       <section className="grid gap-3">
         <h2 className="text-base">Reviewer checklist</h2>
         <p className="-mt-1 text-[13px] text-muted">

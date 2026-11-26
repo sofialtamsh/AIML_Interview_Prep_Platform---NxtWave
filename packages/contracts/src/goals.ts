@@ -60,11 +60,15 @@ export type OnboardingDraft = z.infer<typeof OnboardingDraft>;
 export const OnboardingState = z.object({ completed: z.boolean(), draft: OnboardingDraft });
 export type OnboardingState = z.infer<typeof OnboardingState>;
 
+/**
+ * `bracketId` and `schedule` are required only while students choose them (see the study plan).
+ * Otherwise they are ignored and the team's plan applies.
+ */
 export const CompleteOnboardingBody = z.object({
   roleId: z.uuid(),
-  bracketId: z.uuid(),
+  bracketId: z.uuid().optional(),
   skills: SkillRatings,
-  schedule: Schedule,
+  schedule: Schedule.optional(),
 });
 export type CompleteOnboardingBody = z.infer<typeof CompleteOnboardingBody>;
 
@@ -115,7 +119,8 @@ export const GoalResponse = z.object({
 });
 export type GoalResponse = z.infer<typeof GoalResponse>;
 
-export const ChangeTargetBody = z.object({ roleId: z.uuid(), bracketId: z.uuid() });
+/** `bracketId` is required only while students choose their package (see the study plan). */
+export const ChangeTargetBody = z.object({ roleId: z.uuid(), bracketId: z.uuid().optional() });
 export type ChangeTargetBody = z.infer<typeof ChangeTargetBody>;
 
 export const UpdateSkillsBody = z.object({ skills: SkillRatings });

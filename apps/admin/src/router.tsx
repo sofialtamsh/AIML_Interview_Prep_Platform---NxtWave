@@ -5,10 +5,14 @@ import { GuestOnly, RequireAdmin, RequireSuperAdmin } from './lib/auth';
 import { AccessPage } from './pages/app/AccessPage';
 import { AdminShell } from './pages/app/AdminShell';
 import { AdminsPage } from './pages/app/AdminsPage';
+import { AnalyticsPage } from './pages/app/AnalyticsPage';
 import { CatalogPage } from './pages/app/CatalogPage';
 import { CurriculumPage } from './pages/app/CurriculumPage';
+import { FeedbackPage } from './pages/app/FeedbackPage';
 import { OverviewPage } from './pages/app/OverviewPage';
+import { PracticePage } from './pages/app/PracticePage';
 import { StudentsPage } from './pages/app/StudentsPage';
+import { StudyPlanPage } from './pages/app/StudyPlanPage';
 import { AcceptInvitePage } from './pages/auth/AcceptInvitePage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { ForgotPasswordPage, ResetPasswordPage } from './pages/auth/PasswordPages';
@@ -20,8 +24,14 @@ const LessonsPage = lazy(() =>
 const LessonWorkspace = lazy(() =>
   import('./pages/app/lessons/LessonWorkspace').then((m) => ({ default: m.LessonWorkspace })),
 );
+const HiringPage = lazy(() =>
+  import('./pages/app/HiringPage').then((m) => ({ default: m.HiringPage })),
+);
 const AiSettingsPage = lazy(() =>
   import('./pages/app/AiSettingsPage').then((m) => ({ default: m.AiSettingsPage })),
+);
+const CoveragePage = lazy(() =>
+  import('./pages/app/CoveragePage').then((m) => ({ default: m.CoveragePage })),
 );
 const later = (node: ReactNode) => <Suspense fallback={<Spinner />}>{node}</Suspense>;
 
@@ -60,12 +70,21 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <OverviewPage /> },
       { path: 'students', element: <StudentsPage /> },
+      { path: 'analytics', element: <AnalyticsPage /> },
+      { path: 'study-plan', element: <StudyPlanPage /> },
+      { path: 'practice', element: <PracticePage /> },
+      { path: 'feedback', element: <FeedbackPage /> },
       { path: 'catalog', element: <CatalogPage /> },
       { path: 'curriculum', element: <CurriculumPage /> },
       { path: 'lessons', element: later(<LessonsPage />) },
       { path: 'lessons/:subtopicId', element: later(<LessonWorkspace />) },
+      { path: 'coverage', element: later(<CoveragePage />) },
       { path: 'ai', element: later(<AiSettingsPage />) },
       { path: 'access', element: <AccessPage /> },
+      {
+        path: 'hiring',
+        element: <RequireSuperAdmin>{later(<HiringPage />)}</RequireSuperAdmin>,
+      },
       {
         path: 'admins',
         element: (

@@ -6,6 +6,7 @@ import {
   checkPlan,
   fromGenSection,
   GenSectionBatch,
+  internalDataIssues,
   LessonDocument,
   LessonPlan,
   llmJsonSchema,
@@ -227,6 +228,10 @@ function checkBatch(
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
         problems.push({ path: `sections.${i}.${issue.path.join('.')}`, message: issue.message });
+      }
+    } else {
+      for (const issue of internalDataIssues(parsed.data)) {
+        problems.push({ path: `sections.${i}`, message: issue.message });
       }
     }
   });

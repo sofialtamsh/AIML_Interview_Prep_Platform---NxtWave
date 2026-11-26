@@ -18,7 +18,9 @@ import type { AppContext } from '../../context.ts';
 import type { Prisma } from '../../db/prisma.ts';
 import { isUniqueViolation } from '../../lib/db-errors.ts';
 import { AppError, notFound } from '../../lib/errors.ts';
+import { ActivityLog } from '../analytics/activity-log.ts';
 import type { RoadmapService, StudentTrack } from '../roadmap/roadmap.service.ts';
+import { topicPosition } from './lesson-store.ts';
 import {
   minutesOf,
   publishedLesson,
@@ -43,10 +45,14 @@ const lessonUpdated = () =>
  * them at their target depth, and never receives an answer before they have tried.
  */
 export class LessonService {
+  private readonly activity: ActivityLog;
+
   constructor(
     private readonly ctx: AppContext,
     private readonly roadmaps: RoadmapService,
-  ) {}
+  ) {
+    this.activity = new ActivityLog(ctx);
+  }
 
   private get db() {
     return this.ctx.db;
@@ -97,6 +103,7 @@ export class LessonService {
           slug: subtopic.topic.slug,
           title: subtopic.topic.title,
           iconKey: subtopic.topic.iconKey,
+          position: await topicPosition(this.db, subtopic.topic),
         },
       },
       depth: { rank: item.depthRank, name: depth?.name ?? '' },
@@ -172,6 +179,12 @@ export class LessonService {
     const row = await this.db.moduleProgress.findUniqueOrThrow({
       where: { studentId_subtopicId: { studentId, subtopicId: item.subtopicId } },
     });
+    await this.activity.record(
+      studentId,
+      'LESSON_STEP',
+      `${ref.topicSlug}/${ref.subtopicSlug}#${body.sectionKey}`,
+      seconds,
+    );
     return progressDto(row, lesson.version.id);
   }
 
@@ -196,6 +209,15 @@ export class LessonService {
         response: body.response as Prisma.InputJsonValue,
       },
     });
+    // A written answer is not right or wrong until the student rates it.
+    if (result.correct !== null) {
+      await this.activity.record(
+        studentId,
+        'QUIZ_ANSWER',
+        `${ref.topicSlug}/${ref.subtopicSlug}#${target.section.key}:${item.key}`,
+        result.correct ? 1 : 0,
+      );
+    }
     return result;
   }
 
@@ -242,6 +264,14 @@ export class LessonService {
         completedVersionId: lesson.version.id,
       },
     });
+    // Finishing again (a review) is not a second completion.
+    if (!progress.completedAt) {
+      await this.activity.record(
+        studentId,
+        'LESSON_COMPLETED',
+        `${ref.topicSlug}/${ref.subtopicSlug}`,
+      );
+    }
     return {
       progress: progressDto(row, lesson.version.id),
       next: await this.nextAfter(studentId, track, item.subtopicId),
@@ -288,8 +318,14 @@ export class LessonService {
       const existing = await this.db.feedback.findFirst({
         where: { studentId, targetType: 'SECTION', sectionRevisionId: body.revisionId },
       });
-      const data = { thumbs: body.thumbs, tags: body.tags ?? [], text };
-      if (existing && !body.thumbs && !text && data.tags.length === 0) {
+      // A thumb tapped later must not wipe a comment written earlier: a save without a note or
+      // tags keeps the ones already there.
+      const data = {
+        thumbs: body.thumbs,
+        tags: body.tags?.length ? body.tags : (existing?.tags ?? []),
+        text: text ?? existing?.text ?? null,
+      };
+      if (existing && !data.thumbs && !data.text && data.tags.length === 0) {
         await this.db.feedback.delete({ where: { id: existing.id } });
       } else if (existing) {
         await this.db.feedback.update({ where: { id: existing.id }, data });

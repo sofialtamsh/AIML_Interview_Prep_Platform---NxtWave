@@ -1,6 +1,9 @@
 node_modules/
 dist/
-coverage/
+# Test-coverage reports only: a bare `coverage/` would also hide src/modules/coverage.
+/coverage/
+/apps/*/coverage/
+/packages/*/coverage/
 .env
 .env.*
 !.env.example
@@ -15,3 +18,6 @@ apps/api/storage/
 
 # Python packages cached by the lesson code verifier
 .cache/
+
+# Production data exports (they hold the hiring data): never commit them.
+/deploy/data/

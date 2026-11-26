@@ -86,7 +86,8 @@ export function Chip({ selected = false, className, children, ...rest }: ChipPro
       type="button"
       aria-pressed={selected}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition',
+        // `min-h-10` on phones only, so a chip stays a 40px touch target without growing on desktop.
+        'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition max-sm:min-h-10',
         selected
           ? 'border-ink bg-ink text-surface'
           : 'border-line bg-surface text-ink-2 hover:border-line-2',
@@ -221,7 +222,7 @@ export function Dialog({
             <button
               type="button"
               onClick={onClose}
-              className="grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink"
+              className="grid size-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink sm:size-8"
               aria-label="Close"
             >
               <X className="size-4" />

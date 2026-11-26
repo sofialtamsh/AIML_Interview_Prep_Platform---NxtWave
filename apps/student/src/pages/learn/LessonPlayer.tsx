@@ -7,7 +7,10 @@ import {
   LessonRuntimeProvider,
   SectionBody,
   SectionHeader,
+  type StepFlow,
+  safeStorage,
   sectionTitle,
+  wantsWideStage,
 } from '@app/learning-ui';
 import { Alert, ApiError, Button, cn, Dialog, errorMessage } from '@app/ui';
 import {
@@ -18,14 +21,24 @@ import {
   FastForward,
   Flag,
   ListOrdered,
+  PanelLeftClose,
   RefreshCw,
   Target,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Link } from 'react-router';
 import { DepthMeter, formatMinutes } from '../../features/roadmap/parts';
 import { api, queryClient, useMe } from '../../lib/api';
+import { LESSON_NARRATION, SELF_PACED } from '../../lib/features';
 import { afterLessonProgress, keys, lessonPath } from '../../lib/queries';
 import { LessonComplete } from './LessonComplete';
 import { StepFeedback } from './StepFeedback';
@@ -67,12 +80,77 @@ function useStudyTimer() {
   };
 }
 
-const checkFinished = (s: StudentSection, attempts: ReadonlyMap<string, AttemptRecord>) =>
-  s.kind !== 'KNOWLEDGE_CHECK' ||
-  s.body.items.every((i) => {
+/**
+ * Tells the step how much of the window it has, as `--lesson-room` on the step's body: the
+ * height left under the lesson header, the step's title and any notice above the content, and
+ * over the step bar where that is fixed to the bottom (small screens). Slide decks size their
+ * frame from it, so the frame and its controls sit inside the window without scrolling the
+ * page, however short the window is (a laptop browser that is not full screen).
+ */
+function useStepRoom(
+  body: RefObject<HTMLElement | null>,
+  bar: RefObject<HTMLElement | null>,
+  stepKey: string | null,
+) {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: measured again for every step
+  useLayoutEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    const measure = () => {
+      // Offsets, not client rects: the step's entrance animation must not skew the reading.
+      let top = 0;
+      for (let n: HTMLElement | null = el; n; n = n.offsetParent as HTMLElement | null)
+        top += n.offsetTop;
+      const nav = bar.current;
+      const fixedBar = nav && getComputedStyle(nav).position === 'fixed' ? nav.offsetHeight : 0;
+      const room = document.documentElement.clientHeight - top - fixedBar - 12;
+      el.style.setProperty('--lesson-room', `${Math.round(room)}px`);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    // A title that wraps or a notice that appears moves the content: measure again.
+    const watched = el.closest('main');
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    if (ro && watched) ro.observe(watched);
+    return () => {
+      window.removeEventListener('resize', measure);
+      ro?.disconnect();
+    };
+  }, [stepKey]);
+}
+
+const OUTLINE_KEY = 'nwp:lesson-steps';
+const isDesktop = () => window.matchMedia('(min-width: 64rem)').matches;
+
+/**
+ * Whether the list of steps is shown beside the lesson on a wide screen. The student's own
+ * choice is remembered; until they make one it is open only where there is room for it and a
+ * lab side by side (1440px), so a laptop gives the whole width to the lesson.
+ */
+function useOutlineShown() {
+  const [shown, setShown] = useState(() => {
+    const saved = safeStorage.get(OUTLINE_KEY);
+    return saved ? saved === 'open' : window.innerWidth >= 1440;
+  });
+  const set = (next: boolean) => {
+    setShown(next);
+    safeStorage.set(OUTLINE_KEY, next ? 'open' : 'closed');
+  };
+  return [shown, set] as const;
+}
+
+/**
+ * A check is finished when every question has a graded answer. A quiz with a pool shows only
+ * `draw` of its questions per attempt, so it is finished once that many are answered.
+ */
+function checkFinished(s: StudentSection, attempts: ReadonlyMap<string, AttemptRecord>) {
+  if (s.kind !== 'KNOWLEDGE_CHECK') return true;
+  const graded = s.body.items.filter((i) => {
     const a = attempts.get(`${s.key}#${i.key}`);
     return a !== undefined && a.result.correct !== null;
-  });
+  }).length;
+  return graded >= Math.min(s.body.items.length, s.body.draw ?? s.body.items.length);
+}
 
 export function LessonPlayer({ data }: { data: LessonResponse }) {
   const topicSlug = data.subtopic.topic.slug;
@@ -97,9 +175,21 @@ export function LessonPlayer({ data }: { data: LessonResponse }) {
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState<string[]>([]);
   const [outlineOpen, setOutlineOpen] = useState(false);
+  const [outlineShown, setOutlineShown] = useOutlineShown();
+  // A lab's walkthrough, when the step on screen has one: the step bar's button walks it first.
+  const [flow, setFlow] = useState<StepFlow | null>(null);
+  const reportFlow = useCallback((next: StepFlow | null) => setFlow(next), []);
   const [timeSpent, setTimeSpent] = useState(data.progress.timeSpentSec);
   const takeSeconds = useStudyTimer();
   const stepRef = useRef<HTMLElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLElement>(null);
+  const advanceRef = useRef<() => void>(() => {});
+
+  const step = steps[index] as StudentSection;
+  const isLast = index === steps.length - 1;
+  const nextStep = steps[index + 1];
+  const nextLabel = nextStep ? `Next: ${sectionTitle(nextStep)}` : 'Last step of the lesson';
 
   const glossary = useMemo(() => glossaryOf(steps), [steps]);
   const runtime: LessonRuntime = useMemo(
@@ -112,16 +202,19 @@ export function LessonPlayer({ data }: { data: LessonResponse }) {
       onAttempt: (sectionKey, itemKey, record) =>
         setAttempts((prev) => new Map(prev).set(`${sectionKey}#${itemKey}`, record)),
       storagePrefix: `nwp:${me?.id ?? 'me'}`,
+      voice: data.subtopic.topic.position % 2,
+      narration: LESSON_NARRATION,
+      reportFlow,
+      advance: { label: nextLabel, go: () => advanceRef.current() },
     }),
-    [base, attempts, glossary, me?.id],
+    [base, attempts, glossary, me?.id, data.subtopic.topic.position, reportFlow, nextLabel],
   );
 
-  const step = steps[index] as StudentSection;
-  const isLast = index === steps.length - 1;
   const required = steps.filter((s) => !s.fastTrack);
   const requiredDone = required.filter((s) => done.has(s.key)).length;
   const percent = required.length ? Math.round((requiredDone / required.length) * 100) : 0;
   const canContinue = checkFinished(step, attempts);
+  useStepRoom(bodyRef, barRef, finished ? null : step.key);
 
   // Each step starts at the top, with focus on its heading for keyboard and screen-reader users.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the step changes
@@ -143,6 +236,7 @@ export function LessonPlayer({ data }: { data: LessonResponse }) {
   };
 
   const advance = async (completed: boolean) => {
+    if (saving) return;
     setSaving(true);
     setError(null);
     try {
@@ -173,6 +267,10 @@ export function LessonPlayer({ data }: { data: LessonResponse }) {
     }
   };
 
+  advanceRef.current = () => {
+    if (canContinue) void advance(true);
+  };
+
   if (finished) {
     return (
       <LessonComplete
@@ -200,15 +298,35 @@ export function LessonPlayer({ data }: { data: LessonResponse }) {
     />
   );
 
+  // One button for "what comes next": a lab's walkthrough first, then the next step.
+  const inFlow = flow !== null && flow.index < flow.count;
+  const wide = wantsWideStage(step);
+  const goBack = () => {
+    if (flow && flow.index > 0) flow.go(flow.index - 1);
+    else setIndex(index - 1);
+  };
+  const goNext = () => {
+    if (flow && inFlow) flow.go(flow.index + 1);
+    else void advance(true);
+  };
+  const toggleSteps = () => {
+    if (isDesktop()) setOutlineShown(!outlineShown);
+    else setOutlineOpen(true);
+  };
+
   return (
     <LessonRuntimeProvider value={runtime}>
       <div className="min-h-dvh">
         <header className="sticky top-0 z-30 border-b border-line bg-surface/92 backdrop-blur-md">
-          <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6">
+          <div className="flex h-14 items-center gap-3 px-4 sm:px-6">
             <Link
-              to={`/topics/${topicSlug}`}
+              to={SELF_PACED ? '/roadmap' : `/topics/${topicSlug}`}
               className="grid size-9 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-surface-2 hover:text-ink"
-              aria-label="Close the lesson and go back to the topic"
+              aria-label={
+                SELF_PACED
+                  ? 'Close the lesson and go back to the list of units'
+                  : 'Close the lesson and go back to the topic'
+              }
             >
               <X className="size-5" aria-hidden />
             </Link>
@@ -233,22 +351,66 @@ export function LessonPlayer({ data }: { data: LessonResponse }) {
                 />
               </div>
             </div>
+            {/* On a wide screen this shows or hides the list beside the lesson; on a small one
+                it opens the list over it. */}
             <button
               type="button"
-              onClick={() => setOutlineOpen(true)}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-[12.5px] font-semibold text-ink-2 hover:border-line-2 lg:hidden"
+              onClick={toggleSteps}
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12.5px] font-semibold hover:border-line-2',
+                outlineShown
+                  ? 'border-line text-ink-2 lg:border-line-2 lg:bg-surface-2 lg:text-ink'
+                  : 'border-line text-ink-2',
+              )}
             >
-              <ListOrdered className="size-4" aria-hidden /> Steps
+              <ListOrdered className="size-4" aria-hidden />
+              <span className="lg:hidden">Steps</span>
+              <span className="hidden lg:inline">{outlineShown ? 'Hide steps' : 'Steps'}</span>
             </button>
           </div>
         </header>
 
-        <div className="mx-auto grid max-w-6xl gap-8 px-4 pt-6 pb-28 sm:px-6 lg:grid-cols-[15.5rem_minmax(0,1fr)] lg:pb-16">
-          <aside className="hidden min-w-0 lg:block">
-            <div className="sticky top-20">{outline}</div>
-          </aside>
+        {/* `snug:` is a window under 700px tall, or a screen below `lg`: the space above the step
+            tightens there (less padding, the step's label and title on one line where they fit),
+            so the step keeps its room. A lab gets the whole width; a reading step keeps a
+            column narrow enough to read. The bottom padding clears the fixed step bar. */}
+        <div
+          className={cn(
+            'mx-auto grid gap-8 px-4 pt-6 pb-24 snug:pt-3 sm:px-6',
+            wide ? 'max-w-[1600px]' : 'max-w-6xl',
+            outlineShown && 'lg:grid-cols-[15.5rem_minmax(0,1fr)]',
+          )}
+        >
+          {outlineShown && (
+            <aside className="hidden min-w-0 lg:block">
+              {/* A long outline scrolls inside the window: its last steps were cut off below a
+                  short window and, being sticky, never came into view. The padding (taken back
+                  by the margin) keeps the current step's shadow and focus rings from being cut. */}
+              <div className="sticky top-[4.5rem] -m-2 max-h-[calc(100svh-9.5rem)] overflow-y-auto p-2 [scrollbar-width:thin]">
+                <div className="mb-1 flex items-center justify-between px-2.5">
+                  <span className="eyebrow">Steps</span>
+                  <button
+                    type="button"
+                    onClick={() => setOutlineShown(false)}
+                    aria-label="Hide the list of steps"
+                    title="Hide the list of steps"
+                    className="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-ink"
+                  >
+                    <PanelLeftClose className="size-4" aria-hidden />
+                  </button>
+                </div>
+                {outline}
+              </div>
+            </aside>
+          )}
 
-          <main className="grid min-w-0 max-w-3xl content-start gap-6">
+          <main
+            className={cn(
+              'mx-auto grid w-full min-w-0 content-start gap-6',
+              !wide && 'max-w-3xl',
+              outlineShown && 'lg:mx-0',
+            )}
+          >
             {index === 0 && <LessonIntro data={data} />}
             {data.progress.updatedSinceCompletion && index === 0 && (
               <Alert tone="info">
@@ -260,10 +422,18 @@ export function LessonPlayer({ data }: { data: LessonResponse }) {
               key={step.key}
               ref={stepRef}
               tabIndex={-1}
-              className="grid gap-5 outline-none animate-rise"
+              className="grid gap-5 outline-none animate-rise snug:gap-3"
               aria-label={sectionTitle(step)}
             >
-              <SectionHeader section={step} done={done.has(step.key)} />
+              <SectionHeader
+                section={step}
+                done={done.has(step.key)}
+                className={cn(
+                  'snug:flex snug:flex-wrap snug:items-baseline snug:gap-x-3',
+                  // A lab needs every pixel of height: its label and title share one line.
+                  wide && 'flex! flex-wrap items-baseline gap-x-3',
+                )}
+              />
               {step.fastTrack && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-g3/30 bg-g3/10 px-4 py-2.5 text-[13.5px]">
                   <span className="flex items-center gap-2 text-ink">
@@ -282,15 +452,10 @@ export function LessonPlayer({ data }: { data: LessonResponse }) {
                   )}
                 </div>
               )}
-              <SectionBody section={step} />
+              <div ref={bodyRef} className="grid grid-cols-[minmax(0,1fr)]">
+                <SectionBody section={step} />
+              </div>
             </article>
-
-            <StepFeedback
-              key={`fb-${step.key}`}
-              moduleVersionId={data.lesson.moduleVersionId}
-              section={step}
-              initial={data.feedback.sections[step.key] ?? null}
-            />
 
             {error && (
               <Alert tone="bad">
@@ -326,47 +491,70 @@ export function LessonPlayer({ data }: { data: LessonResponse }) {
                 .
               </Alert>
             )}
-
-            <nav
-              className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none"
-              aria-label="Lesson steps"
-            >
-              <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-                <Button
-                  variant="ghost"
-                  onClick={() => setIndex(index - 1)}
-                  disabled={index === 0 || saving}
-                >
-                  <ArrowLeft className="size-4" aria-hidden /> Back
-                </Button>
-                <div className="flex items-center gap-3">
-                  {!canContinue && (
-                    <span className="hidden text-[12.5px] text-muted sm:inline">
-                      Answer every question to continue
-                    </span>
-                  )}
-                  <Button
-                    size="lg"
-                    variant={isLast ? 'primary' : 'dark'}
-                    onClick={() => advance(true)}
-                    loading={saving}
-                    disabled={!canContinue}
-                  >
-                    {isLast ? (
-                      <>
-                        <Flag className="size-4" aria-hidden /> Finish lesson
-                      </>
-                    ) : (
-                      <>
-                        Continue <ArrowRight className="size-4" aria-hidden />
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </nav>
           </main>
         </div>
+
+        {/* The step bar is fixed to the bottom of the window at every size, so the way forward
+            is always in view: no step ends with a hunt for the button. Its one main button is
+            whatever comes next, a lab's walkthrough step first and then the next lesson step,
+            and the line beside it names that next thing. */}
+        <nav
+          ref={barRef}
+          className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:px-6"
+          aria-label="Lesson steps"
+        >
+          <div className="mx-auto flex max-w-[1600px] items-center gap-2 sm:gap-3">
+            <Button
+              variant="ghost"
+              onClick={goBack}
+              disabled={(index === 0 && !(flow && flow.index > 0)) || saving}
+              aria-label="Back"
+            >
+              <ArrowLeft className="size-4" aria-hidden />
+              <span className="hidden sm:inline">Back</span>
+            </Button>
+            <StepFeedback
+              key={`fb-${step.key}`}
+              moduleVersionId={data.lesson.moduleVersionId}
+              section={step}
+              initial={data.feedback.sections[step.key] ?? null}
+            />
+            <div className="ml-auto flex min-w-0 items-center gap-3">
+              <span
+                className="hidden min-w-0 truncate text-right text-[12.5px] text-muted md:block"
+                aria-live="polite"
+              >
+                {!canContinue
+                  ? 'Answer the questions to continue'
+                  : flow && inFlow
+                    ? flow.label
+                    : nextLabel}
+              </span>
+              <Button
+                variant={inFlow || isLast ? 'primary' : 'dark'}
+                onClick={goNext}
+                loading={saving}
+                disabled={!canContinue}
+                className="min-w-[9.75rem] shrink-0"
+              >
+                {flow && inFlow ? (
+                  <>
+                    {flow.next}
+                    <ArrowRight className="size-4" aria-hidden />
+                  </>
+                ) : isLast ? (
+                  <>
+                    <Flag className="size-4" aria-hidden /> Finish lesson
+                  </>
+                ) : (
+                  <>
+                    Continue <ArrowRight className="size-4" aria-hidden />
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </nav>
 
         <Dialog
           open={outlineOpen}

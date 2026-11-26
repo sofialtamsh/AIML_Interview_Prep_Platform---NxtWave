@@ -173,7 +173,7 @@ export function LessonWorkspace() {
   if (!m) return null;
 
   return (
-    <div className="grid gap-5 animate-rise">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 animate-rise">
       <nav
         className="flex flex-wrap items-center gap-1 text-[13px] text-muted"
         aria-label="Breadcrumb"

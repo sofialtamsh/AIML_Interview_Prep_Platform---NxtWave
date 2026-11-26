@@ -82,7 +82,7 @@ export function resolvePreview(
 }
 
 /** Grades checks in the browser against the full document (admins can see answers anyway). */
-export function previewRuntime(doc: LessonDocument): LessonRuntime {
+export function previewRuntime(doc: LessonDocument, coursePosition = 0): LessonRuntime {
   const byKey = new Map(doc.sections.map((s) => [s.key, s]));
   return {
     grade: async ({ sectionKey, itemKey, response }) => {
@@ -100,6 +100,9 @@ export function previewRuntime(doc: LessonDocument): LessonRuntime {
     attempts: new Map(),
     glossary: glossaryOf(doc.sections),
     storagePrefix: 'nwp-admin-preview',
+    voice: coursePosition % 2,
+    // The read-aloud voice is hidden from students in V1; the team can still hear the scripts.
+    narration: true,
   };
 }
 

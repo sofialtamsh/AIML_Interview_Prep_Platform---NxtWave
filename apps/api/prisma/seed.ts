@@ -9,8 +9,11 @@ import { hashPassword } from '../src/lib/password.ts';
 import { bootstrapAiConfig } from '../src/modules/ai/models.ts';
 import { bootstrapCatalog } from '../src/modules/catalog/catalog.bootstrap.ts';
 import { bootstrapExemplarLessons } from '../src/modules/content/exemplars/bootstrap.ts';
+import { bootstrapMlePilot, MLE_ROLE } from '../src/modules/curriculum/mle-pilot.ts';
 import { bootstrapPilotCurriculum } from '../src/modules/curriculum/pilot-curriculum.ts';
+import { bootstrapHiringData } from '../src/modules/hiring/hiring.bootstrap.ts';
 import { RoadmapService } from '../src/modules/roadmap/roadmap.service.ts';
+import { loadStudyPlan, resolveGoalChoices } from '../src/modules/study-plan/study-plan.store.ts';
 
 const ctx = createAppContext('seed');
 
@@ -47,15 +50,26 @@ async function seedStudent() {
   if (await ctx.db.user.findUnique({ where: { email } }))
     return console.log(`• student ${email} exists`);
 
-  const [role, bracket] = await Promise.all([
-    ctx.db.careerRole.findUniqueOrThrow({
-      where: { slug: 'ai-engineer' },
-      include: { skillAreas: true },
-    }),
-    ctx.db.packageBracket.findUniqueOrThrow({ where: { code: 'LPA_8_12' } }),
-  ]);
+  const role = await ctx.db.careerRole.findUniqueOrThrow({
+    where: { slug: MLE_ROLE },
+    include: { skillAreas: true },
+  });
   const today = todayIn('Asia/Kolkata', new Date());
-  const deadline = new Date(Date.parse(`${today}T00:00:00Z`) + 75 * 86_400_000);
+  // Package and time as a real student gets them: from the team's study plan when it decides.
+  const fallback = await ctx.db.packageBracket.findUniqueOrThrow({ where: { code: 'LPA_8_12' } });
+  const { plan } = await loadStudyPlan(ctx.db);
+  const choice = await resolveGoalChoices(
+    ctx.db,
+    plan,
+    {
+      bracketId: fallback.id,
+      schedule: { dailyMinutes: 90, studyWeekdays: [1, 2, 3, 4, 5, 6], deadline: null },
+    },
+    today,
+  );
+  const deadline = choice.schedule.deadline
+    ? toDbDate(choice.schedule.deadline)
+    : new Date(Date.parse(`${today}T00:00:00Z`) + 75 * 86_400_000);
   const levels = [2, 1, 1, 0, 1, 0];
 
   const student = await ctx.db.user.create({
@@ -71,9 +85,9 @@ async function seedStudent() {
       goals: {
         create: {
           roleId: role.id,
-          bracketId: bracket.id,
-          dailyMinutes: 90,
-          studyWeekdays: [1, 2, 3, 4, 5, 6],
+          bracketId: choice.bracketId,
+          dailyMinutes: choice.schedule.dailyMinutes,
+          studyWeekdays: choice.schedule.studyWeekdays,
           startDate: toDbDate(today),
           deadline,
         },
@@ -87,14 +101,16 @@ async function seedStudent() {
   });
   const goal = await ctx.db.studentGoal.findFirstOrThrow({ where: { studentId: student.id } });
   await new RoadmapService(ctx).ensureForGoal(goal.id);
-  console.log(`✓ created demo student ${email} (AI Engineer · 8–12 LPA) with a roadmap`);
+  console.log(`✓ created demo student ${email} (${role.title}) with a roadmap`);
 }
 
 try {
   console.log('✓ catalog bootstrap', await bootstrapCatalog(ctx.db));
   console.log('✓ pilot curriculum', await bootstrapPilotCurriculum(ctx.db));
+  console.log('✓ ML Engineer pilot', await bootstrapMlePilot(ctx));
   console.log('✓ reference lessons (under review)', await bootstrapExemplarLessons(ctx.db));
   console.log('✓ AI model routes and prices', await bootstrapAiConfig(ctx.db));
+  console.log('✓ Hiring Intelligence data (super admins)', await bootstrapHiringData(ctx));
   await seedAdmin();
   await seedStudent();
 } finally {

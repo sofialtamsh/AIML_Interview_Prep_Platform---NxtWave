@@ -39,6 +39,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'hook',
       kind: 'HOOK',
+      title: 'Why RAG needs chunking',
       depthRank: 1,
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
@@ -71,7 +72,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'why',
       kind: 'EXPLANATION',
-      title: 'Why not one big chunk, or tiny ones?',
+      title: 'Chunk size: too big vs too small',
       depthRank: 1,
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
@@ -120,7 +121,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'diagram.pipeline',
       kind: 'DIAGRAM',
-      title: 'Where chunking sits in RAG',
+      title: 'Chunking in the RAG pipeline',
       depthRank: 2,
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
@@ -198,7 +199,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'code.fixed-size',
       kind: 'CODE_EXAMPLE',
-      title: 'Fixed-size chunking in ten lines',
+      title: 'Fixed-size chunking in Python',
       depthRank: 2,
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
@@ -227,7 +228,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'explore.size-overlap',
       kind: 'CODE_EXPLORER',
-      title: 'Find the setting that keeps the answer whole',
+      title: 'Tune chunk size and overlap',
       depthRank: 2,
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
@@ -345,14 +346,14 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
         tone: 'pitfall',
-        title: 'Characters, words and tokens are different units',
+        title: 'Characters vs words vs tokens',
         body: 'Splitters count size in characters, words or tokens, and the numbers are not interchangeable: 500 characters is only about 80 to 100 English words. Check which unit your library uses before copying a setting from a blog post.',
       },
     },
     {
       key: 'check.basics',
       kind: 'KNOWLEDGE_CHECK',
-      title: 'Quick check',
+      title: 'Chunking basics',
       depthRank: 2,
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
@@ -431,7 +432,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'explore.free-play',
       kind: 'WIDGET',
-      title: 'Free play: beat the boundary',
+      title: 'Overlap at chunk boundaries',
       depthRank: 3,
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
@@ -462,7 +463,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'strategies',
       kind: 'CARD_DECK',
-      title: 'Four ways to cut',
+      title: 'Four chunking strategies',
       depthRank: 3,
       conceptKeys: ['rag.chunking.structure-aware'],
       body: {
@@ -500,7 +501,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'code.sentences',
       kind: 'CODE_EXAMPLE',
-      title: 'Never cut a sentence in half',
+      title: 'Sentence-aware chunking',
       depthRank: 3,
       conceptKeys: ['rag.chunking.structure-aware'],
       body: {
@@ -529,14 +530,14 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
       conceptKeys: ['rag.chunking.structure-aware'],
       body: {
         tone: 'real_world',
-        title: 'Libraries call this recursive splitting',
+        title: 'Recursive splitting in libraries',
         body: "LangChain's `RecursiveCharacterTextSplitter` tries the biggest natural boundary first (paragraphs), then lines, then words, and only cuts smaller when a piece is still too long. LlamaIndex's `SentenceSplitter` likewise tries to keep whole sentences together. Same idea as the code above, with more edge cases handled.",
       },
     },
     {
       key: 'metadata',
       kind: 'EXPLANATION',
-      title: 'Give every chunk a label',
+      title: 'Chunk metadata',
       depthRank: 3,
       conceptKeys: ['rag.chunking.metadata'],
       body: {
@@ -564,7 +565,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'playground.headings',
       kind: 'PLAYGROUND',
-      title: 'Your turn: chunk by heading',
+      title: 'Heading-based chunker',
       depthRank: 3,
       conceptKeys: ['rag.chunking.structure-aware', 'rag.chunking.metadata'],
       body: {
@@ -598,7 +599,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'tradeoffs',
       kind: 'EXPLANATION',
-      title: 'Chunk size is a trade-off you measure',
+      title: 'Chunk size trade-offs',
       depthRank: 4,
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
@@ -633,7 +634,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'code.evaluate',
       kind: 'CODE_EXAMPLE',
-      title: "Measure, don't guess",
+      title: 'Measure answer coverage',
       depthRank: 4,
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
@@ -658,7 +659,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'evaluation',
       kind: 'EXPLANATION',
-      title: 'From a quick check to a real evaluation',
+      title: 'Evaluate chunking with recall@k',
       depthRank: 4,
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
@@ -687,7 +688,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
     {
       key: 'check.advanced',
       kind: 'KNOWLEDGE_CHECK',
-      title: 'Check your judgement',
+      title: 'Choose a chunking strategy',
       depthRank: 4,
       conceptKeys: [
         'rag.chunking.size-overlap',
@@ -810,7 +811,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
         tone: 'interview_tip',
-        title: 'Say the trade-off out loud',
+        title: 'Explain the size trade-off',
         body: 'Interviewers rarely want one magic number. A strong answer names a starting point, explains **why** (sharp matching versus enough context), and says how you would check it on the real documents.',
       },
     },
@@ -818,7 +819,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
       key: 'interview.basic',
       slotKey: 'interview',
       kind: 'INTERVIEW_PLAYBOOK',
-      title: 'Answering in an interview',
+      title: 'Chunking for a RAG chatbot',
       depthRank: 2,
       conceptKeys: ['rag.chunking.size-overlap', 'rag.chunking.metadata'],
       body: {
@@ -852,7 +853,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
       key: 'interview.production',
       slotKey: 'interview',
       kind: 'INTERVIEW_PLAYBOOK',
-      title: 'Answering in an interview',
+      title: 'Production chunking design',
       depthRank: 4,
       conceptKeys: [
         'rag.chunking.size-overlap',
@@ -905,7 +906,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
       key: 'summary.basic',
       slotKey: 'summary',
       kind: 'SUMMARY',
-      title: 'What to remember',
+      title: 'Chunking key takeaways',
       depthRank: 1,
       conceptKeys: ['rag.chunking.size-overlap'],
       body: {
@@ -924,7 +925,7 @@ export const CHUNKING_STRATEGIES_LESSON: LessonDocumentInput = {
       key: 'summary.advanced',
       slotKey: 'summary',
       kind: 'SUMMARY',
-      title: 'What to remember',
+      title: 'Chunking key takeaways',
       depthRank: 4,
       conceptKeys: [
         'rag.chunking.size-overlap',

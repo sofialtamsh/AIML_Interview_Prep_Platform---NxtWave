@@ -16,11 +16,36 @@ import { daysBetween, fromDbDate, toDbDate, todayIn } from '../../lib/dates.ts';
 import { AppError, notFound } from '../../lib/errors.ts';
 import type { SessionUser } from '../auth/session.service.ts';
 import { RoadmapService } from '../roadmap/roadmap.service.ts';
+import {
+  deadlineFor,
+  loadStudyPlan,
+  planBracketId,
+  resolveGoalChoices,
+} from '../study-plan/study-plan.store.ts';
 
 const DEADLINE_MIN_DAYS = 7;
 const DEADLINE_MAX_DAYS = 3 * 365;
 
 type GoalRow = Prisma.StudentGoalGetPayload<{ include: { role: true; bracket: true } }>;
+
+/** Row data for a new active goal (shared with the study plan, which also creates goals). */
+export function newGoalData(
+  studentId: string,
+  roleId: string,
+  bracketId: string,
+  s: Schedule,
+  startDate: string,
+) {
+  return {
+    studentId,
+    roleId,
+    bracketId,
+    dailyMinutes: s.dailyMinutes,
+    studyWeekdays: [...s.studyWeekdays].sort((a, b) => a - b),
+    startDate: toDbDate(startDate),
+    deadline: s.deadline ? toDbDate(s.deadline) : null,
+  };
+}
 
 export function toGoalDto(g: GoalRow, timezone: string, now: Date): GoalDto {
   const deadline = g.deadline ? fromDbDate(g.deadline) : null;
@@ -96,14 +121,17 @@ export class GoalsService {
     if (user.studentProfile?.onboardingCompletedAt) {
       throw new AppError('CONFLICT', 'You have already finished onboarding.');
     }
-    await this.assertSelectable(body.roleId, body.bracketId);
-    this.assertSchedule(body.schedule, tzOf(user));
+    const today = todayIn(tzOf(user), this.ctx.now());
+    // Package and time come from the team's study plan unless students choose them.
+    const { plan } = await loadStudyPlan(this.db);
+    const choice = await resolveGoalChoices(this.db, plan, body, today);
+    await this.assertSelectable(body.roleId, choice.bracketId);
+    if (!choice.scheduleFromPlan) this.assertSchedule(choice.schedule, tzOf(user));
     await this.assertSkillAreas(body.skills);
 
-    const today = todayIn(tzOf(user), this.ctx.now());
     const goal = await this.db.$transaction(async (tx) => {
       const created = await tx.studentGoal.create({
-        data: this.goalData(user.id, body.roleId, body.bracketId, body.schedule, today),
+        data: newGoalData(user.id, body.roleId, choice.bracketId, choice.schedule, today),
       });
       await this.writeSkills(tx, user.id, body.skills);
       await tx.studentProfile.update({
@@ -163,6 +191,10 @@ export class GoalsService {
   }
 
   async updateSchedule(user: SessionUser, schedule: Schedule) {
+    const { plan } = await loadStudyPlan(this.db);
+    if (!plan.studentsChooseSchedule) {
+      throw new AppError('FORBIDDEN', 'Your study time is set by your mentors for now.');
+    }
     this.assertSchedule(schedule, tzOf(user));
     const goal = await this.activeGoalOrThrow(user.id);
     await this.db.studentGoal.update({
@@ -180,23 +212,45 @@ export class GoalsService {
   /** A new role or package is a new goal; the old one is kept as history. */
   async changeTarget(user: SessionUser, body: ChangeTargetBody) {
     const current = await this.activeGoalOrThrow(user.id);
-    if (current.roleId === body.roleId && current.bracketId === body.bracketId) {
+    const { plan } = await loadStudyPlan(this.db);
+    // While students don't choose a package, a role change keeps everyone on the plan's package.
+    const bracketId = plan.studentsChoosePackage
+      ? body.bracketId
+      : ((await planBracketId(this.db, plan)) ?? current.bracketId);
+    if (!bracketId) {
+      throw new AppError('VALIDATION_ERROR', 'Pick the package you are aiming for.', {
+        fields: { bracketId: 'Pick a package.' },
+      });
+    }
+    if (current.roleId === body.roleId && current.bracketId === bracketId) {
       return this.getGoal(user.id, tzOf(user));
     }
-    await this.assertSelectable(body.roleId, body.bracketId);
+    await this.assertSelectable(body.roleId, bracketId);
+    const today = todayIn(tzOf(user), this.ctx.now());
+    const startDate = fromDbDate(current.startDate);
     const schedule: Schedule = {
       dailyMinutes: current.dailyMinutes,
       studyWeekdays: current.studyWeekdays,
-      deadline: current.deadline ? fromDbDate(current.deadline) : null,
+      // A plan deadline counts from when the student first started, not from this switch.
+      deadline: plan.studentsChooseSchedule
+        ? current.deadline
+          ? fromDbDate(current.deadline)
+          : null
+        : deadlineFor(plan.deadline, startDate),
     };
-    const today = todayIn(tzOf(user), this.ctx.now());
     const [, next] = await this.db.$transaction([
       this.db.studentGoal.update({
         where: { id: current.id },
         data: { isActive: false, endedAt: this.ctx.now() },
       }),
       this.db.studentGoal.create({
-        data: this.goalData(user.id, body.roleId, body.bracketId, schedule, today),
+        data: newGoalData(
+          user.id,
+          body.roleId,
+          bracketId,
+          schedule,
+          plan.studentsChooseSchedule ? today : startDate,
+        ),
       }),
     ]);
     await this.roadmaps.ensureForGoal(next.id);
@@ -241,24 +295,6 @@ export class GoalsService {
   }
 
   // ───────────── helpers ─────────────
-
-  private goalData(
-    studentId: string,
-    roleId: string,
-    bracketId: string,
-    s: Schedule,
-    today: string,
-  ) {
-    return {
-      studentId,
-      roleId,
-      bracketId,
-      dailyMinutes: s.dailyMinutes,
-      studyWeekdays: [...s.studyWeekdays].sort((a, b) => a - b),
-      startDate: toDbDate(today),
-      deadline: s.deadline ? toDbDate(s.deadline) : null,
-    };
-  }
 
   private async writeSkills(tx: Prisma.TransactionClient, studentId: string, skills: SkillRatings) {
     for (const [skillAreaId, level] of Object.entries(skills)) {

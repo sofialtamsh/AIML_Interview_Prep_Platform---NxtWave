@@ -12,6 +12,8 @@ import {
   InterviewPlaybookView,
   SummaryView,
 } from './sections/explain';
+import { SlidesView } from './sections/slides';
+import { VisualView } from './sections/visual';
 import { WidgetView } from './sections/widgets';
 
 /** What each kind of step is called in the player. */
@@ -20,10 +22,12 @@ export const KIND_LABEL: Record<SectionKind, string> = {
   EXPLANATION: 'The idea',
   CARD_DECK: 'Explore',
   DIAGRAM: 'See it',
+  VISUAL: 'Watch it',
+  SLIDES: 'Slides',
   CODE_EXAMPLE: 'Code',
   CODE_EXPLORER: 'Explore the code',
   WIDGET: 'Play with it',
-  KNOWLEDGE_CHECK: 'Quick check',
+  KNOWLEDGE_CHECK: 'Quiz',
   PLAYGROUND: 'Your turn',
   CALLOUT: 'Good to know',
   INTERVIEW_PLAYBOOK: 'In the interview',
@@ -32,7 +36,7 @@ export const KIND_LABEL: Record<SectionKind, string> = {
 
 const DEFAULT_TITLE: Partial<Record<SectionKind, string>> = {
   HOOK: 'Why this matters',
-  KNOWLEDGE_CHECK: 'Quick check',
+  KNOWLEDGE_CHECK: 'Quiz',
   SUMMARY: 'What to remember',
   INTERVIEW_PLAYBOOK: 'How to answer it',
 };
@@ -43,6 +47,17 @@ export function sectionTitle(
   if (s.title) return s.title;
   if (s.kind === 'CALLOUT') return (s.body as { title: string }).title;
   return DEFAULT_TITLE[s.kind] ?? KIND_LABEL[s.kind];
+}
+
+/** Labs laid out as one frame (story, picture and calculation side by side): they need width. */
+const WIDE_STAGE = new Set(['linreg-lab', 'linreg-multi', 'knn-lab', 'logreg-lab']);
+
+/**
+ * True for a step that should get the full width of the window instead of a reading column:
+ * a lab whose picture, controls and calculation are meant to be seen together.
+ */
+export function wantsWideStage(s: Pick<StudentSection, 'kind'> & { body: unknown }): boolean {
+  return s.kind === 'WIDGET' && WIDE_STAGE.has((s.body as { widget: string }).widget);
 }
 
 export function SectionHeader({
@@ -90,6 +105,10 @@ export function SectionBody({ section }: { section: StudentSection }) {
       return <CardDeckView s={section} />;
     case 'DIAGRAM':
       return <DiagramView s={section} />;
+    case 'VISUAL':
+      return <VisualView s={section} />;
+    case 'SLIDES':
+      return <SlidesView s={section} />;
     case 'CODE_EXAMPLE':
       return <CodeExampleView s={section} />;
     case 'CODE_EXPLORER':

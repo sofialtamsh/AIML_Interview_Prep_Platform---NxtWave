@@ -67,7 +67,7 @@ export function StudentsPage() {
   const sel = 'rounded-[10px] border border-line bg-surface px-3 py-2 text-sm';
 
   return (
-    <div className="grid gap-5 animate-rise">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 animate-rise">
       <PageHeader
         eyebrow="People"
         title="Students"
@@ -454,7 +454,9 @@ function StudentRoadmap({ id }: { id: string }) {
               t.items.map((i) => (
                 <li key={i.subtopicId} className="flex flex-wrap items-baseline gap-x-2">
                   <span className="w-5 font-mono text-xs text-muted">{i.sequence}</span>
-                  <span className="min-w-0 flex-1">{i.title}</span>
+                  {/* A floor of 12rem drops the depth/status onto its own line instead of
+                      squeezing the title into a one-word column on a phone. */}
+                  <span className="min-w-[12rem] flex-1">{i.title}</span>
                   <span className="text-xs text-muted">
                     {i.depth.name} · {ROADMAP_STATUS[i.status]}
                   </span>

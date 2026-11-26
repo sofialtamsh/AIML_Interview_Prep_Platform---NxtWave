@@ -39,10 +39,11 @@ export const QUEUES = {
  * The API only *enqueues* (no scheduling/supervision); the worker processes and schedules.
  * Both run pg-boss's idempotent schema migration on start.
  */
-export function createBoss(env: Env, role: 'api' | 'worker') {
+export function createBoss(env: Env, role: 'api' | 'worker' | 'api-with-jobs') {
   return new PgBoss({
     connectionString: env.DATABASE_URL,
-    application_name: `nwp-${role}`,
+    application_name: role === 'worker' ? 'nwp-worker' : 'nwp-api',
+    // An API that also runs the background jobs schedules and supervises them, as the worker does.
     ...(role === 'api' ? { schedule: false, supervise: false } : {}),
   });
 }

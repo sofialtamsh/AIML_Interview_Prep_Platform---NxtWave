@@ -56,7 +56,6 @@ export function SwipeCards({ cards }: { cards: Card[] }) {
     }
   };
 
-  const tint = TINTS[i % TINTS.length] as string;
   return (
     <div className="mx-auto grid w-full max-w-md gap-3">
       <div className="flex gap-1" aria-hidden>
@@ -80,49 +79,67 @@ export function SwipeCards({ cards }: { cards: Card[] }) {
         <span className="sr-only" aria-live="polite">
           Card {i + 1} of {cards.length}: {card.title}
         </span>
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: drag surface; buttons and arrow keys do the same */}
-        <div
-          key={i}
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: focusable so the arrow keys move between cards
-          tabIndex={0}
-          onKeyDown={onKeyDown}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          style={{
-            transform: `translateX(${dx}px) rotate(${dx / 28}deg)`,
-            background: `linear-gradient(160deg, color-mix(in srgb, ${tint} 16%, var(--surface)) 0%, var(--surface) 70%)`,
-            borderColor: `color-mix(in srgb, ${tint} 35%, var(--line))`,
-          }}
-          className={cn(
-            'grid min-h-[17rem] cursor-grab touch-pan-y content-start gap-3 rounded-[22px] border p-6 shadow-lift select-none active:cursor-grabbing sm:min-h-[19rem] sm:p-7',
-            dx === 0 && 'transition-transform duration-300',
-            direction === 1
-              ? 'animate-[swipe-in-right_0.35s_ease-out]'
-              : 'animate-[swipe-in-left_0.35s_ease-out]',
-          )}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <span className="text-[44px] leading-none" aria-hidden>
-              {card.emoji ?? '💡'}
-            </span>
-            {card.tag && (
-              <span
-                className="rounded-full px-2.5 py-0.5 font-mono text-[10.5px] font-bold tracking-wide uppercase"
-                style={{ background: `color-mix(in srgb, ${tint} 18%, transparent)`, color: tint }}
+        {/* Every card sits in the same grid cell, so the deck is as tall as its tallest card and
+            the buttons below never move. Only the current card is shown and interactive. */}
+        <div className="grid">
+          {cards.map((c, n) => {
+            const on = n === i;
+            const tint = TINTS[n % TINTS.length] as string;
+            return (
+              <div
+                key={c.title}
+                tabIndex={on ? 0 : undefined}
+                aria-hidden={!on}
+                onKeyDown={on ? onKeyDown : undefined}
+                onPointerDown={on ? onPointerDown : undefined}
+                onPointerMove={on ? onPointerMove : undefined}
+                onPointerUp={on ? onPointerUp : undefined}
+                onPointerCancel={on ? onPointerUp : undefined}
+                style={{
+                  transform: on ? `translateX(${dx}px) rotate(${dx / 28}deg)` : undefined,
+                  background: `linear-gradient(160deg, color-mix(in srgb, ${tint} 16%, var(--surface)) 0%, var(--surface) 70%)`,
+                  borderColor: `color-mix(in srgb, ${tint} 35%, var(--line))`,
+                }}
+                className={cn(
+                  'grid min-h-[17rem] touch-pan-y content-start gap-3 rounded-[22px] border p-6 shadow-lift select-none [grid-area:1/1] sm:min-h-[19rem] sm:p-7',
+                  !on && 'pointer-events-none invisible',
+                  on && 'cursor-grab active:cursor-grabbing',
+                  on && dx === 0 && 'transition-transform duration-300',
+                  on &&
+                    (direction === 1
+                      ? 'animate-[swipe-in-right_0.35s_ease-out]'
+                      : 'animate-[swipe-in-left_0.35s_ease-out]'),
+                )}
               >
-                {card.tag}
-              </span>
-            )}
-          </div>
-          <h4 className="font-display text-[22px] leading-tight font-bold tracking-tight text-ink">
-            {card.title}
-          </h4>
-          <Rich text={card.front} className="text-[16px] leading-relaxed text-ink" />
-          {card.back && (
-            <Rich text={card.back} className="border-t border-line pt-3 text-[14px] text-ink-2" />
-          )}
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-[44px] leading-none" aria-hidden>
+                    {c.emoji ?? '💡'}
+                  </span>
+                  {c.tag && (
+                    <span
+                      className="rounded-full px-2.5 py-0.5 font-mono text-[10.5px] font-bold tracking-wide uppercase"
+                      style={{
+                        background: `color-mix(in srgb, ${tint} 18%, transparent)`,
+                        color: tint,
+                      }}
+                    >
+                      {c.tag}
+                    </span>
+                  )}
+                </div>
+                <h4 className="font-display text-[22px] leading-tight font-bold tracking-tight text-ink">
+                  {c.title}
+                </h4>
+                <Rich text={c.front} className="text-[16px] leading-relaxed text-ink" />
+                {c.back && (
+                  <Rich
+                    text={c.back}
+                    className="border-t border-line pt-3 text-[14px] text-ink-2"
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 

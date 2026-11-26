@@ -8,11 +8,794 @@
 | 3 · Curriculum and planner (dual-path topic page) | ✅ Done | 2026-11-03 |
 | 3.1 · Smart planner (prep timeline, paces, week by week, calendar) | ✅ Done | 2026-11-03 |
 | 4 · Content engine ⭐ (AI generation + evaluation, lesson player) | 🚧 4A + 4B done (lessons, player, AI agents); 4C pilot lessons next | 2026-11-05 (4B) |
+| Pilot v2 · ML Engineer focus (team study plan, hidden pickers, Practice tab, technical titles) | ✅ Done | 2026-11-05 |
+| Pilot v2.1 · MLE curriculum from interview data, topic-tagged practice, 11★ for questions | ✅ Done | 2026-11-05 |
+| Pilot v2.2 · Hiring data for super admins, animated visuals, lesson library (Topic 1 written and reviewed) | ✅ Done | 2026-11-06 |
+| Pilot v2.3 · Slide-deck lessons, coding-ground code UI, Topic 1 rebuilt as slides, Python core concepts | ✅ Done | 2026-11-09 |
+| Pilot v2.4 · Moving pictures (26-animation library), real-world hooks, deck play mode, no-data-citation guard | ✅ Done | 2026-11-10 |
+| Pilot v2.5 · Python for Interviews unit 2: OOP lesson (story + moving picture per concept), 7 OOP animations | ✅ Done | 2026-11-12 |
+| Pilot v2.6 · Deep Learning units 1–3 (neural networks, training, CNNs and vision), 13 DL animations, shuffled answer options | ✅ Done | 2026-11-12 |
+| Pilot v2.7 · Deep Learning unit 4: text preprocessing and representation (NLP), 7 NLP animations | ✅ Done | 2026-11-12 |
+| Pilot v2.8 · Deep Learning unit 5: attention and transformers, 9 sequence-model and transformer animations | ✅ Done | 2026-11-12 |
+| Pilot v2.9 · LLMs topic unit 1: how LLMs work, 6 LLM animations | ✅ Done | 2026-11-12 |
+| Pilot v2.10 · Admin → Content coverage (content readiness, roadmap runway, interview-evidence gaps) | ✅ Done | 2026-11-13 |
+| Pilot v2.11 · Interview-quality pass on all lessons, DSA + ML Fundamentals lessons, interactive explorers | ✅ Done | 2026-11-18 |
+| Pilot v2.12 · Pre-publish review and publishing of all lessons; Data Preparation module (4 units, 4 new explorers) | ✅ Done | 2026-11-18 |
+| Pilot v2.13 · Python & NumPy for AI module (3 units, 5 new explorers, 15 animations), reviewed and published | ✅ Done | 2026-11-18 |
 | 5 · Question bank and practice | Planned | – |
 | 6 · Research and curriculum agents | Planned | – |
 | 7 · Video and system design case studies | Planned | – |
 | 8 · Analytics and admin dashboards | Planned | – |
 | 9 · Hardening and deployment | Planned | – |
+
+---
+
+## Pilot v2.13 report: the Python & NumPy for AI module (2026-11-18)
+
+**The ask.** The product owner asked for the three units of the Python & NumPy for AI module, with playgrounds, reviewed and published like the Data Preparation units.
+
+**1. Three units, all depth 1, all published as v1.**
+
+| Unit | Length | Contents | Explorers |
+|---|---|---|---|
+| NumPy arrays and vectorization | 40 min | Lists vs arrays; shape, ndim, size and dtype; mixed types and uint8 overflow; vectorised GST on every order; why NumPy is faster; ufuncs, `np.min` vs `np.minimum`, `np.where`; 1-D and 2-D slicing (`a[1]` vs `a[1:2]`, `a[1:5, :]` vs `a[1:5]`); boolean masks; fancy indexing and top-k with argsort; views vs copies, including writes through a mask; a sensor-cleaning playground | array-index-explorer |
+| Broadcasting and array operations | 44 min | Aggregating along an axis, argmax, keepdims and row shares; the broadcasting rule; a shape error and its fix; the silent (n,) vs (n, 1) loss bug; pairwise distances with a practice task; reshape, -1, transpose vs reshape, new axes, ravel vs flatten; concatenate vs stack; a column-scaling playground | axis-explorer, broadcast-explorer |
+| Linear algebra essentials for AI | 47 min | The dot product by hand and in NumPy; its geometry; a neuron as a dot product; L1 and L2 norms and distances; unit vectors and cosine similarity; choosing a similarity threshold; matrix multiplication, `*` vs `@`, order, by-hand loops and plain-Python transpose; batch scoring with `Q @ D.T`; a dense layer; a batch-search playground where raw dot products pick the wrong document | vector-explorer, matmul-explorer |
+
+- All code was checked on NumPy 2.5.4 and on NumPy 2.4.6, the version the browser runs; both print the same. Runnable code never prints integer dtypes, because the browser's default integer can differ from a 64-bit PC's.
+- Three independent reviewers (one per unit) re-ran every snippet on both versions, recomputed every number and drove every explorer state. They proposed 40 fixes (4 must), all applied. The must-fixes:
+  - "a mask makes a copy" now says that writing through a mask (`a[a < 0] = 0`) still changes the array;
+  - the `np.linalg.norm` card no longer claims `ord=1` sums a matrix's absolute values (it is the largest column sum);
+  - transposing a matrix without NumPy, an asked question, now has a practice task and a card.
+- Explorer bugs the reviewers found and that are fixed: a broadcast verdict that said "both have 1" when one array had no axis; integer `marks @ marks.T` printed as floats; the exact NumPy warning for a zero vector.
+- 15 new animations (arrays, broadcasting, linear algebra) were checked on contact sheets in light and dark.
+
+**2. Five new explorer widgets.**
+- `array-index-explorer`: slice rows and columns (all, a slice or one index), mask cells, or filter rows on one column. It shows the expression, the picked cells, NumPy's printout and shape, and whether the result is a view or a copy.
+- `axis-explorer`: sum, mean, max, min or argmax with axis None, 0 or 1 and keepdims; cells that collapse together share a colour.
+- `broadcast-explorer`: two preset shapes lined up from the right, the stretched copies drawn dashed, A + B, or NumPy's exact error.
+- `vector-explorer`: two 2-D vectors with dot product, both norms, cosine, angle and distance, optionally as unit vectors.
+- `matmul-explorer`: pick a result cell to see its row and column; switch to B @ A, A @ A, A @ A.T or A * B to see order, clashes and `*` vs `@`.
+
+The maths, printouts and error messages are in `packages/learning-ui/src/numpy-explorers.ts`, with 12 tests against NumPy output. The explorers were driven in the admin preview on desktop and on a 390 px phone in dark mode, with no console errors. The AI writer prompts describe them (`lesson.plan@8`, `lesson.draft@8`). The lesson-library test now also accepts lessons for the AI Engineer pilot topics.
+
+**Tests.** The API passes 492 tests in 23 files, content 33 and learning-ui 177. Biome is clean on 319 files, and every package typechecks.
+
+**Who sees it.** The module belongs to the AI Engineer curricula only (published, but the role is not live yet). ML Engineer students do not reach it until it is added to their curriculum, which needs the product owner's decision.
+
+---
+
+## Pilot v2.12 report: review and publish, and the Data Preparation module (2026-11-18)
+
+**The ask.** The product owner asked the team to review and publish each lesson after creating it, and to do the same for every lesson already written. They also asked for the Data Preparation module next, with playgrounds wherever students learn by changing a setting.
+
+**1. Pre-publish review of the 21 existing lessons.**
+- Seven independent reviewers each took one group: HR, Python, DSA, ML Fundamentals, Deep Learning A and B, and LLMs.
+- They checked everything added since the audit: the new slides, the Q&A decks and the explorer tasks. They re-ran every snippet and recomputed every number.
+- Errors found and fixed:
+  - a quoted Python 3.14 error message;
+  - the task-scheduler card;
+  - "only ReLU allows this trick";
+  - a one-hidden-layer quiz;
+  - an explorer task that failed if students did the tasks in order;
+  - a momentum task that contradicted its slide.
+- About 20 clarity fixes were also applied, and the recursive factorial now rejects negative numbers, so it matches the coding-round lesson.
+- The training-explorer epochs slider now reaches its exact maximum. It uses 1,000 log-scale positions, where it previously stopped at 2,951.
+- **All 21 lessons are published on dev**, including training-deep-networks v1 then v2, and chunking v2, which only renames titles.
+- The publish guard found no interview-data citations.
+
+**2. Data Preparation, four units, all depth 1.**
+
+| Unit | Length | Contents | Explorers |
+|---|---|---|---|
+| Missing values, outliers and duplicates | 47 min | Profiling; the cleaning order; mean, median or mode; forward and backward fill and interpolation; a missing flag; KNN imputation; IQR and z-score rules (including masking); treating outliers; removing the row or only the value; duplicate keys and text that differs only in case or spaces | imputation-explorer, outlier-explorer |
+| Encoding, scaling and data leakage | 44 min | One-hot, label and ordinal encoding; categories never seen in training; many categories (frequency and target encoding); min-max, standard and robust scaling; which models need scaling; target vs train–test leakage; pipelines and a mixed-column ColumnTransformer; feature engineering and selection | scaling-explorer |
+| Pandas for data wrangling | 36 min | Series and DataFrames; boolean filters; loc and iloc; copy-on-write in pandas 3; groupby, named aggregation and transform; merge, join and concat and their defaults; vectorisation; pivot tables; huge CSVs; a runnable revenue-report playground | — |
+| Statistics for ML | 36 min | Centre and spread; n − 1; the constant that minimises MSE or MAE; distributions and the central limit theorem; correlation vs causation; hypothesis tests, two-sided p-values, Type I and II errors, which test fits | pvalue-explorer |
+
+- Every unit was independently reviewed (93 fixes in all) and then published. The most important catches:
+  - a leaky feature-engineering example (price per square foot next to a price model);
+  - a one-sided null hypothesis with two-sided p-values;
+  - "loc and iloc agree on a default index", which is wrong for slices.
+- All code is verified with Python 3.14, pandas 3.1, NumPy 2.5, scipy 1.18 and scikit-learn 1.9. The browser runs pandas 3.0.2 in Pyodide, and the reviewer re-ran the pandas lesson there too.
+- 14 new animations were QA'd on contact sheets in light and dark.
+- New taxonomy concepts were added insert-only: `data.feature-selection`, `stats.distributions` and `stats.correlation`.
+
+**3. Four new explorer widgets.**
+- `outlier-explorer`: a number line with the box, the IQR or z-score fences, keep, remove or cap, and a draggable extreme value.
+- `imputation-explorer`: three datasets and seven fill methods, showing the summary before and after.
+- `scaling-explorer`: KNN with no scaling, min-max or standard scaling, the neighbourhood, each feature's share of the distance, and two sliders for the new point.
+- `pvalue-explorer`: an exact two-sided binomial test, matching scipy to within 1e-11.
+
+The explorer maths is in `packages/learning-ui/src/data-explorers.ts`, with 11 tests against pandas and scipy values. The explorers were driven in the admin preview on desktop and on a 390 px phone in dark mode, with no console errors and nothing clipped. The AI writer prompts now describe them (`lesson.plan@7`, `lesson.draft@7`).
+
+**Tests.** The API passes 480 tests in 23 files, content 33 and learning-ui 150. Biome is clean on 313 files, and every package typechecks.
+
+**Coverage now** (ML Engineer, 3–6 LPA):
+- 24 of 48 roadmap units are written and live.
+- Live lessons cover about 42% of the band's interview questions, up from 11% this morning.
+- Students first reach a unit with no lesson on study day 10.
+- DSA patterns is published too, but it only reaches students when curriculum v3 is published.
+- The plan still needs 33 study days against 27; 75 minutes a day would fit.
+
+---
+
+## Pilot v2.11 report: interview-quality pass, new lessons and interactive explorers (2026-11-18)
+
+**The ask.** Lessons must prepare students for ML Engineer interviews at 8–10 LPA (sometimes 12),
+while staying simple. There is one bar for every package for now. Add units where needed. Students
+also need interactive playgrounds where they change the epochs, the learning rate, SGD/momentum/Adam
+and activation parameters, and see the effect themselves. These sit beside the existing visuals and
+never replace them.
+
+**1. Audit of the 15 existing lessons.**
+- Five independent reviewers each checked one group: HR, Python, DL part A, DL part B and LLMs.
+- They measured every lesson against the real interview questions for its themes, from the Hiring
+  Intelligence data (internal only, never cited). They re-ran every snippet and recomputed every
+  number.
+- Five writers then applied the findings:
+  - every accuracy error, about 20 in all, for example the padding claim, −ln(0.10), the GRU bias
+    note, RoPE and vocabulary sizes, and three edge-case bugs in the coding-round model code;
+  - every "must" and most "should" additions, among them resume follow-ups, the CTC and
+    notice-period switching questions, the PyTorch training loop, reading loss curves, detection
+    threshold scenarios without retraining, one-hot vs embeddings, the padding mask, chat request
+    flow, cost and latency, structured output, LangGraph routing, the mutable-default trap, writing
+    a context manager, the MRO and text normalisation.
+- **Every lesson now ends with an interview Q&A flip deck.** It holds 7–10 cards of real questions,
+  scenarios included, each with a 35–65 word model answer.
+- Card decks read one card at a time, so their word budget now grows per card, as slide decks do
+  (`style.ts`, with a test).
+
+**2. New lessons.**
+- **DSA essentials** covers complexity, brute force then optimise, hashing, two pointers, sorting
+  and binary search, bubble and merge sort, and heaps.
+- **DSA patterns** is a new unit: sliding windows, running totals, stacks, recursion,
+  memoisation and min cost climbing stairs.
+- **ML Fundamentals 1–3** covers AI/ML/DL and the learning types; loss functions and gradient
+  descent, including the linear-regression update; and overfitting, bias–variance, validation,
+  leakage and L1/L2.
+- Each was independently reviewed and the fixes applied. All code is verified with Python 3.14,
+  NumPy 2.5 and scikit-learn 1.9.
+- 14 new animations, QA'd on contact sheets in light and dark.
+
+**3. Interactive explorers (new WIDGET kinds).** These are vetted components; a lesson only fills
+in presets and up to four "Try this" tasks.
+- **`training-explorer`**: a polynomial trained live by gradient descent. Students choose the
+  degree, learning rate, L2 and epochs (on a log axis). They see training and validation loss, the
+  best epoch, the overfitting zone and the fit drawn over the data.
+- **`optimizer-race`**: SGD, momentum and Adam on one narrow valley, with the learning rate, β,
+  steps and optional mini-batch noise.
+- **`activation-explorer`**: sigmoid, tanh, ReLU and leaky ReLU of w·x + b, with the slope and the
+  vanishing-gradient zones shaded.
+- The maths is in `packages/learning-ui/src/explorers.ts` and is tested. With seed 56: the
+  degree-9 best epoch is 22 and validation then rises five-fold; 0.5 diverges at epoch 31; L2 0.3
+  removes the overfitting; degree 1 underfits; at 0.3, Adam beats momentum, which beats SGD; SGD
+  zig-zags at 0.9 and diverges at 1.05.
+- They are placed in loss-gradient-descent, generalization-regularization, training-deep-networks
+  (two, beside the early-stopping visual) and neural-network-fundamentals.
+- Every interaction was driven in the admin preview on desktop, on a 390 px phone and in dark
+  mode, with no console errors and nothing past the edge.
+- The AI writer prompt now lists the new widgets (`lesson.plan@6`, `lesson.draft@6`).
+
+**4. Curriculum and limits.**
+- The `dsa-patterns` subtopic and three concepts were added to the taxonomy (bootstrap, insert-only).
+- **ML Engineer curriculum v3 is saved as a DRAFT** for both packages (it adds DSA patterns), for
+  a person to publish in Admin → Curriculum.
+- Lesson time limit: 45 min at the deepest depth, or 50 with an explorer
+  (`test/lesson-library.test.ts`).
+
+**Tests.** 622 pass: the API (464), content (33) and learning-ui (125). Biome is clean on 306 files,
+and every package typechecks.
+
+**Synced to dev, all UNDER_REVIEW.**
+- training-deep-networks was skipped, because its v1 is APPROVED by a person.
+- Once that v1 is published, re-run `pnpm lessons:sync` to create v2 with the audit additions and
+  both explorers.
+
+**Coverage after this pass** (ML Engineer, 3–6 LPA):
+- 20 of 48 units written, 6 live, 14 in review.
+- Written lessons cover about 39% of the band's interview questions, up from 34%.
+
+---
+
+## Pilot v2.10 report: Content coverage page (2026-11-13)
+
+The user asked how much of the content is done and whether interview prep needs more modules and
+units. They then asked to turn that analysis into a feature. It is separate from the student
+analytics in Overview and Students: it measures the **content**, not student activity.
+
+**Admin → Coverage** (`/coverage`, every admin) picks a role × package with a published
+curriculum. By default that is the study plan's package on the live role (ML Engineer, 3–6 LPA).
+It shows:
+
+- **What needs attention**: signals computed from the data, worst first.
+  - The study day on which students reach the first lesson that is not live, and the day it would
+    move to once the lessons in review are published.
+  - High-priority units with no lesson.
+  - Whether the roadmap fits the plan's deadline, and the daily minutes that would.
+  - Practice questions per unit.
+  - Measured lesson time against the roadmap's estimate.
+  - Lessons in the older, pre-slides format.
+- **Numbers**: lessons written, lessons live, units with practice, roadmap days against the
+  deadline, and interview coverage (super admins).
+- **Write next / Publish next**: unwritten and unpublished units, in the order students reach them.
+- **Units**: every unit in roadmap order with its study day, priority, depth, lesson state and
+  version, measured lesson minutes against planned minutes, and practice count. Super admins also
+  see each unit's interview reach. Filters: not written, not live, high priority.
+- **Interview evidence** (super admins only, ML Engineer only):
+  - the band's interview themes, with the units that teach them and how far each lesson is;
+  - interview formats (take-home assignment, basic coding, DSA, SQL, API, debugging, project
+    discussion, behavioural);
+  - the questions that fall outside the curriculum.
+  - Each row carries a flag where it applies: no unit, not in this curriculum, only optional units,
+    or asked by a third or more of companies but not high priority. A band with fewer than 30
+    companies gets a "read the shares as rough" note.
+
+**How it works.**
+- `GET /api/v1/admin/coverage` (`modules/coverage/`).
+  - Day numbers come from the same planner the students' roadmaps use: a new
+    `RoadmapService.targetPlan`, the study plan, starting today.
+  - Lesson minutes are measured from the version students see (live, else the working one) at the
+    unit's depth, with the player's own resolution.
+  - The evidence share counts a theme taught across several units in equal parts per unit with a
+    lesson.
+- `coverage-map.ts` maps every interview theme and format to the units that teach it.
+  - `hiring-rules.ts` now lists its themes as `PREP_THEMES`, and `themeOf` accepts only those
+    names, so a theme with no mapping fails to compile.
+  - "Other ML concepts" is a catch-all: it has no unit and is not raised as a signal.
+- The evidence is added on the server for super admins only. Other admins get `evidence: null` and
+  a note. Students never reach any of it.
+
+**What it shows on dev today** (ML Engineer, 3–6 LPA, 60 min Mon–Sat, 30-day deadline):
+- **Lessons:** 16 of 48 written, 2 live. Students reach a lesson that isn't live on day 1;
+  publishing the 14 in review moves that to day 5 (DSA essentials). 8 high-priority units have no
+  lesson.
+- **Plan fit:** the roadmap needs 33 study days against 26 allowed; about 75 min a day would fit.
+  At 8–12 LPA it needs 54 days, or about 125 min a day.
+- **Practice:** no unit has practice questions.
+- **Format:** the live self-introduction (v1) and Chunking are in the older format.
+- **Interview coverage:** written lessons cover about 34% of the band's interview questions, live
+  lessons 7%.
+- **Gaps:** take-home assignments are set by 36% of companies, and no unit covers them. CS
+  fundamentals is asked by 29% but is only an optional unit.
+
+**Tests.** `test/coverage.test.ts` (7 tests) checks:
+- the joined view on the real ML Engineer v2 curriculum, with two library lessons, practice
+  questions and a small export;
+- the exact deadline days and the daily minutes that fit;
+- the evidence shares, flags and outside groups;
+- that evidence is withheld from other admins, the other-role note, and 404/400 for bad targets;
+- that the map covers every theme and only real units;
+- format precedence and the weekday phrase.
+
+The authorization matrix covers the new route. The authz, hiring, roadmap, study-plan and
+MLE-pilot suites pass (240 tests). Desktop, phone (390 px) and dark screenshots on the dev admin
+show no console errors and nothing past the right edge.
+
+**Open decisions** (the page surfaces them; nothing in the curriculum was changed):
+- whether to add a take-home-assignment unit, a resume unit and a data-case unit;
+- whether to make CS fundamentals and fine-tuning vs RAG core;
+- the daily minutes or deadline that make the roadmap fit.
+
+---
+
+## Pilot v2.9 report: How LLMs work (2026-11-12)
+
+The user asked for the next unit: the first of the LLMs, Prompting & Agents topic,
+`llms-agents/how-llms-work`.
+
+- **Lesson** (`library/mle/how-llms-work.lesson.ts`): 3–6 LPA at depth 2, 32 min; 8–12 LPA at
+  depth 3, 34 min. What an LLM is (usually a decoder-only transformer; parameters; tokens),
+  generation as predict-append-repeat with a toy loop, a 3-context next-token explorer (logits,
+  softmax, greedy vs sampling), how a question flows through the model, what "understanding"
+  means; tokens with a shopkeeper's-change story and a greedy subword tokenizer, rules of thumb
+  and token cost, the context window as a desk, how chat "memory" works, and a playground that
+  trims a chat to a 70-token budget (30 kept for the reply) so the model forgets the user's name;
+  pre-training to base (foundation) model, instruction tuning and RLHF, pre-train vs fine-tune
+  vs prompt/RAG; generative vs discriminative (with the formal P(label | input) note), types of
+  generative AI, diffusion and GANs. Depth 3 swaps the explorer (slot `practice`) for BPE with
+  code, cross-entropy and perplexity, weight memory and quantization, open-weight vs API models,
+  SFT/reward model/RLHF (PPO)/DPO, and long-context limits; its check ends with "can developers
+  train a foundation model?". Temperature, hallucinations in depth and RAG are left to their units.
+- **Animations** (6 new, 68 in all): next-token-loop, tokenizer-split, context-window (the same
+  chat as the playground: 83 tokens, 13 over, two messages dropped, 67 used), llm-training-stages,
+  genai-types, bpe-merges.
+- **Checks:** every snippet run and matched. Two independent reviews: a must-fix on vocabulary
+  sizes (BERT has 30,522; some models exceed 200,000), RLHF spelled out wrongly, the playground
+  leaving no room for the reply, token cost tested but not taught, "token" used before defined,
+  the BPE story, and the overflow arithmetic in the context-window picture. All applied within
+  the time caps. Synced to dev as v1 UNDER_REVIEW; admin-preview screenshots are clean.
+
+---
+
+## Pilot v2.8 report: Attention and transformers (2026-11-12)
+
+The user asked for the next Deep Learning unit, `deep-learning/attention-transformers`.
+
+- **Lesson** (`library/mle/attention-transformers.lesson.ts`): 3–6 LPA at depth 1, 31 min; 8–12
+  LPA at depth 3, 34 min. Under-8-LPA interviews ask a lot here (RNN, LSTM vs GRU, Q/K/V,
+  multi-head, cross-attention, BERT vs GPT), so depth 1 covers all of them. The story thread is
+  "The dosa was cold, so I sent it back": an RNN loop in NumPy, vanishing (and exploding)
+  gradients, the LSTM as a notebook with gates (cell state updated by adding), LSTM vs GRU weight
+  sets, Bi-LSTM; attention with "it" → "dosa", Q/K/V as a video-app search, the scaled formula
+  and why √d, multi-head as an interview panel, why transformers won; a 3-query explorer and a
+  "write scaled dot-product attention" playground (it catches a missing √d); the block
+  (positional encoding, residuals, layer norm, feed-forward), encoder vs decoder, self vs
+  cross-attention, BERT vs GPT, the three families, and that chat models are decoder-only with no
+  cross-attention; the output layer in the playbook. Depth 3 swaps the RNN deck for a refresher
+  (slot `sequences`) and adds masked attention (code), positional encoding (code), head shapes
+  (code), BERT and GPT pre-training ([CLS], next-sentence prediction), attention cost (n², KV
+  cache, sliding-window, FlashAttention) and a PyTorch encoder (run locally: PyTorch 2.14 CPU).
+- **Animations** (9 new, 62 in all): seq-vs-parallel, rnn-unroll, lstm-gates, attention-weights,
+  qkv-lookup, multi-head, transformer-blocks, bert-vs-gpt, causal-mask. Their numbers match the
+  code (0.84/0.11/0.04 softmax, the 4 × 4 causal-mask weights, "it" keeps 0.04 for itself).
+- **Checks:** every snippet run and matched. Two independent reviews: one must-fix (the playbook
+  implied GPT uses cross-attention) plus precision and coverage fixes (√d spread, LSTM addition,
+  PyTorch's bias counts, BERT's [CLS] and NSP, components, a chat-model check item, playground
+  moved next to the formula, recall-only check items reworked). All applied; paths kept within
+  35 min by rewording. Synced to dev as v1 UNDER_REVIEW; admin-preview screenshots are clean.
+
+---
+
+## Pilot v2.7 report: Text preprocessing and representation (2026-11-12)
+
+The user asked for the next Deep Learning unit, `deep-learning/nlp-text-representation`, in the
+same story-and-moving-picture format.
+
+- **Lesson** (`library/mle/nlp-text-representation.lesson.ts`): 3–6 LPA at depth 2, 31 min;
+  8–12 LPA at depth 3, 34 min. A food-app review story runs through it: cleaning (tokens,
+  lowercasing, stop words, keeping "not"), stemming vs lemmatization with real NLTK code and the
+  part-of-speech catch, a 4-step cleaning explorer, a `clean()` try-it; bag of words, TF-IDF (the
+  formula, code, scikit-learn's smoothed IDF), limits and n-grams; embeddings (a map story,
+  Word2Vec's fill-the-gap idea, cosine in NumPy, a sentence-transformers example, semantic search
+  and RAG spelled out, hybrid search) and a cosine-search playground. Depth 3 swaps the explorer
+  (slot `practice`) for "preprocessing in real projects" (BERT-style models need little cleaning,
+  subword tokens, FastText), and adds skip-gram vs CBOW, GloVe, static vs contextual vectors,
+  choosing a model (language, domain, length, MTEB shortlist, recall@5), dimensions with storage
+  maths, similarity thresholds, and a text-classification pipeline (split before fitting TF-IDF,
+  precision/recall/F1, scikit-learn code).
+- **Animations** (7 new, 53 in all): review-sorter, token-pipeline, stem-vs-lemma, bag-of-words,
+  tfidf-weights (food 0.10, late 1.20, refund 3.91 from ln(1000/df)), embedding-space (angles drawn
+  so cosines are 0.99 and 0.30, matching the code) and word-analogy.
+- **Checks:** every snippet run and matched: Python 3.14 + NumPy + scikit-learn 1.9.1 (the
+  classifier uses Naive Bayes; LogisticRegression's compiled module is blocked by the machine's
+  application-control policy). NLTK was verified in a scratch virtualenv with NLTK 3.9.1, with a
+  verification-only stand-in for the blocked `regex` DLL. The sentence-transformers example is
+  static (no output claimed). Two independent reviews (technical accuracy, student experience)
+  found three ambiguous check items (TF definition, IDF under scikit-learn's smoothing, a
+  two-valid-orders pipeline question) and teaching gaps (leakage and metrics, RAG, model choice,
+  preprocessing for BERT). All were fixed. Optional extras left out to stay within 35 minutes:
+  a sentence-transformers similarity score (it can't be run here), unit-length vectors, and
+  negative sampling. Synced to dev as v1 UNDER_REVIEW; admin-preview screenshots are clean.
+
+---
+
+## Pilot v2.6 report: Deep Learning units 1–3 (2026-11-12)
+
+The user asked for the first three Deep Learning units: neural network fundamentals, training
+deep networks, and CNNs and computer vision, in the same story-and-moving-picture format.
+
+- **Lessons** (`library/mle/`), every concept opening on a real-world story with a moving picture:
+
+  | Lesson | 3–6 LPA | 8–12 LPA |
+  |---|---|---|
+  | `neural-network-fundamentals` | depth 2, 33 min | depth 3, 35 min |
+  | `training-deep-networks` | depth 1 (optional), 20 min | depth 3, 28 min |
+  | `cnn-computer-vision` | depth 1, 27 min | depth 3, 35 min |
+
+  Runnable code is from-scratch NumPy (the in-browser runner has no PyTorch); PyTorch and
+  torchvision appear as static reference code with no claimed output. Highlights: a forward pass
+  and a 6-state activation explorer, the chain rule worked by hand and through a hidden neuron, a
+  train-a-neuron playground, autograd, softmax with cross-entropy (stable), He/Xavier; SGD vs
+  mini-batch vs momentum vs Adam (with its update and AdamW), learning-rate schedules, inverted
+  dropout, early stopping (playground), batch norm vs layer norm, vanishing/exploding gradients,
+  a stuck-loss checklist, train() vs eval(); convolution in NumPy with a 3-filter explorer, many
+  filters and parameter counts, stride/padding (rounding down), pooling, the architecture with
+  dropout, transfer learning, IoU (playground), YOLO, NMS with code, the two IoU thresholds,
+  one- vs two-stage detectors, tracking and mAP. 8–12 gets a shorter basics refresher deck in the
+  neural network lesson (slot `basics`) so its path stays within 35 minutes.
+- **Animations** (13 new, 46 in all): forward-backward, optimizer-paths, dropout-net,
+  early-stopping, batch-norm, vanishing-gradient, conv-filter, max-pool, cnn-pipeline,
+  feature-hierarchy, transfer-learning, iou-boxes, nms-boxes; activation-curves now draws sigmoid,
+  tanh and ReLU. Every number in them is computed (conv rows 0 3 3, max-pool 6/2/3/9, IoU 0.35 and
+  0.75, NMS keeps 0.92 and 0.88, batch-norm mean 8.4 / spread 2.1) and matches the code.
+- **Answer order:** reviewers found every correct option was written first. The student view now
+  shows mcq, multi and predict-output options, and slide try-it choices, in a stable shuffled
+  order (`shuffleStable`, seeded by the item key or prompt); grading by id is unchanged.
+- **Checks:** every snippet run on Python 3.14 + NumPy (the verifier now uses `-P`, since `-I`
+  hides user-installed NumPy). Three independent reviews found no blocking issues except one
+  wrong Adam check item (it claimed big gradients get smaller steps; fixed), plus coverage and
+  story gaps. All major findings were applied; a few optional extras (softmax code at depth 2, a
+  cross-correlation note, two more 8–12 check items) were left out to keep paths within 35 minutes.
+  Admin-preview screenshots on desktop and phone are clean. Synced to dev as v1 UNDER_REVIEW.
+
+---
+
+## Pilot v2.5 report: OOP in Python (2026-11-12)
+
+The user confirmed the unit 1 cards (Core Python concepts) in the admin preview and asked to go
+on to unit 2 of Python for Interviews.
+
+- **Lesson** `library/mle/python-oop.lesson.ts` (3–6 LPA at depth 1, 28 min; 8–12 LPA at depth
+  2, 33 min). Every concept opens on a short real-world story slide with its own moving picture
+  and a "Real use" caption, then the code: a food-delivery app's restaurants (class and objects),
+  a guarded wallet balance (encapsulation), ride-app vehicles (inheritance), one Pay button for
+  UPI, card and cash (polymorphism), a model's fit()/predict() hiding the maths (abstraction).
+  Also: `self`, `__init__` vs `__new__`, a Counter try-it, method overloading vs overriding, duck
+  typing, is-a vs has-a, a six-state "Which method runs" explorer, a four-pillars playbook and a
+  base/child-class playground (`super().__init__`). The 8–12 deck adds class vs instance
+  attributes, class/static methods, `_`/`__` names, dunder methods, abstraction vs encapsulation,
+  abstract-class rules and OOP in ML (an `nn.Module` subclass), a payment-hierarchy playground
+  (abstract class + polymorphism) and a deeper check including the shared-mutable-class-attribute
+  bug.
+- **Animations** (7 new, 33 in the library): class-blueprint, self-binding, inheritance-tree,
+  polymorphism-pay, encapsulation-wallet, abstraction-panel, class-vs-instance.
+- **Checks:** all 25 snippets run on Python 3.14 (outputs, explorer states, starters fail and
+  solutions pass); the verifier now normalises Windows line endings. An independent review found
+  no blocking issues; its 23 findings were applied except multiple inheritance/MRO, which the
+  interview evidence doesn't show. Admin-preview screenshots on desktop and phone are clean, and
+  play mode advances through the pillars deck. Synced to dev as v1 UNDER_REVIEW.
+
+---
+
+## Pilot v2.4 report: moving pictures and real-world hooks (2026-11-10)
+
+The user pointed at the older `C:\Interview Prep Platform` project (its regression topic: card
+deck, animated SVG figures, a simple real-life hook, playgrounds) and asked for lessons with
+moving visuals and very simple hooks that show where a concept is used in real life, inside our
+existing slide format and in the platform's professional style ("not childish").
+
+### 1. What was implemented
+- **Animation library (`AnimationRef`).** 26 looping SVG diagrams (SMIL), drawn from theme
+  tokens and mono labels, with no emoji; the still frame is the most telling one, used when
+  reduced motion is on; each has a screen-reader description (`ANIMATIONS` in
+  `packages/content/src/animations.ts`, drawings in `packages/learning-ui/src/animations.tsx`).
+  - Python: name-tags, list-vs-tuple, set-dedupe, dict-lookup, function-machine, decorator-wrap,
+    comprehension-filter, generator-belt, try-except-net, async-waiter, gil-baton.
+  - Interviews/HR: intro-trailer, star-timeline, ctc-split.
+  - ML (re-themed from the older project; its "loss bowl" and learning-rate curves were drawn
+    upside down and are fixed here): scatter-line, residuals, loss-bowl, learning-rate,
+    train-test-split, overfit-underfit, labels-vs-no-labels, decision-boundary, clusters, neuron,
+    network, activation-curves.
+- **Slides** take `animation` (beside the headline; code or another visual goes below). The
+  picture mounts when its slide shows, so it plays from the start.
+- **Hooks** take `animation` and `realWorld` (2–4 "where you see it" cards with line icons).
+  Icons moved to `learning-ui/src/icons.ts`, typed against `SLIDE_ICONS` (27 everyday icons
+  added: cart, pin, contacts, tag, film, food, wallet, …).
+- **Play mode** for every deck: ▶ advances by reading time (or while the device voice reads the
+  slide, en-IN preferred), fills the current progress segment, never reads code, and stops at a
+  try-it with "Your turn". Narration helpers in `learning-ui/src/deck-play.ts`.
+- **Writer prompt @5:** hooks open on a simple real-world use; the animation menu is generated
+  from `ANIMATIONS`; a professional visual tone, no emoji in slides or hooks.
+
+### 2. Lessons updated (dev drafts refreshed, still UNDER_REVIEW)
+- **Python core concepts:** new hook (a food-delivery app: cart = list, location = tuple, tags =
+  set, menu = dict, with the cart-vs-pin animation and four real-world cards; the tuple twist
+  moved to the bridge, the tiffin analogy to the try-it note). Animations with "Real use: …"
+  captions on the comprehension, set, dict, `is`, function, decorator (both depths), generator,
+  exceptions, references, GIL and async slides. Times unchanged: 26 / 35 / 35 min.
+- **Self-introduction** hook: intro-trailer. **Internship:** STAR slide → star-timeline (its
+  labels avoid seconds, so they never contradict a lesson's own timed example). **HR:** CTC slide
+  → ctc-split.
+
+### 3. Checks
+- Contact sheets of all 26 animations (light and dark, paused at set loop fractions) and admin
+  preview screenshots on desktop and a 390 px phone: no overflow, no console errors; play mode
+  advanced slides 1 → 2 → 3 and stopped at the try-it.
+- Tests: every animation renders as an accessible looping SVG with no hard-coded colours or
+  emoji, and the drawing list matches the content catalogue; narration skips code; schema tests
+  for animations and icon-only real-world cards.
+
+---
+
+## Pilot v2.3 report: slide-deck lessons and a coding-ground UI (2026-11-09)
+
+The user asked for simpler content with better examples, taught like PPT slides (moving slide
+cards with visuals and small playgrounds), code practice that looks like a real coding ground, the
+HR module updated first, then Python for Interviews. They also asked that student content never
+mention the internal interview data.
+
+### 1. What was implemented
+- **`SLIDES` step kind ("Slides").** A deck of 2–12 slides, one idea each:
+  - kicker, headline, body, up to 4 bullets that build in one by one, a visual and a note;
+  - visuals are vetted shapes, so they stay crisp and themeable: `icons` (60-icon set), `emoji`,
+    `stat`, `flow`, `sequence` (terms with the step between neighbours, for number series and
+    lists), `compare`, `code` (≤14 lines + verified output), `chat`, `checklist`, `quote`;
+  - up to 4 ungraded try-its per deck: `choice` (feedback per option), `write` (then a sample) and
+    `code` (edit and run in the browser; `expected` text marks it right);
+  - slides glide in from the side, can be swiped or moved with the arrow keys, have progress
+    segments and full screen; inactive slides leave the layout (state kept) so a tall try-it no
+    longer pushes the controls off a phone screen; reduced motion is respected.
+  - Schema, student schema, generation schema, prompts (`@4`), time estimates, reviewer checklist
+    and docs/07 know the kind. Migration `slides_sections`.
+- **Coding-ground look for all code.** A dark IDE frame (window dots, file tab), highlighted
+  editor with a line gutter, a green Run button (Ctrl/Cmd+Enter), a terminal panel, and a tests
+  panel with PASS/FAIL per check and the solution as `our_solution.py`. On phones, read-only code
+  soft-wraps like an IDE's word wrap, so comments are never cut off.
+- **Style gate.** Slide headlines may not be questions (checked per slide); a deck's word budget
+  grows with its slide count; chat lines inside slides now count as prose.
+- **No data citations.** Every "in our data" / "X of 72 companies" line was removed from student
+  text, and the generation prompt now forbids quoting interview evidence.
+  - *Follow-up, 2026-11-10:* the **published** self-introduction v1 still showed the hook line
+    ("In NxtWave's interview data… 39 of 72…") and company-count card tags, because the cleanup
+    had only reached the new drafts. Its `hook` and `follow-ups` steps were hot-fixed in place
+    (same version and step keys, so student progress is kept; new revisions, audit
+    `content.lesson.published_hotfix`), with v2's wording (and "a video call" / "An AI assistant"
+    for two brand names). A scan of every lesson version in the database now finds no citations.
+  - *Enforced:* `internalDataIssues` (packages/content `style.ts`) flags the data being named
+    (interview/hiring data, "our data", NxtWave), company counts and shares of companies in any
+    string of a step (tags and code comments too). It is part of `styleIssues` (library tests),
+    a **blocking** issue in the AI evaluation, a retry problem for the AI writer and rewriter, and
+    **publishing refuses** a lesson that has it.
+- **Topic 1 rebuilt as slides** (v3), with simpler wording and new try-its: self-introduction
+  (2 decks), internship story (2), HR (3: why us, money and commitments, behavioural), aptitude
+  (2, with `sequence` visuals, a Python "find the gaps" playground and new train / time-and-work
+  slides).
+- **Python core concepts** (Python for Interviews): collections and mutability, functions and
+  decorators, generators and exceptions, and at depth 3 references and copying, call by object
+  reference, context managers, `__main__`, monkey patching, the GIL and async. Slot keys give
+  8–12 students refresher decks, a batching-generator playground and merged checks instead of
+  the basics. Every code output, playground (starter fails, solution passes) and try-it was run
+  with Python 3.14, the version the in-browser runner uses.
+
+  | Lesson | Depth 1 | Depth 2 | Depth 3 |
+  |---|---|---|---|
+  | Self-introduction pitch | 5 steps, 15 min | 9 steps, 25 min | – |
+  | Internship and experience story | 7 steps, 18 min | 11 steps, 26 min | – |
+  | HR and behavioural questions | 8 steps, 17 min | 11 steps, 24 min | – |
+  | Aptitude and logical reasoning (optional) | 10 steps, 26 min | – | – |
+  | Core Python concepts | 9 steps, 26 min | 12 steps, 35 min (3–6) | 13 steps, 35 min (8–12) |
+
+- **Independent reviews** (three reviewers, none shown my assessment) recomputed every number and
+  ran every snippet. They caught, among others: a "good" example that took sole credit for team
+  work; an estimate shown as a measurement; one person with three different family details;
+  train and work-rate checks with no teaching before them; income tax wrongly reducing a 4.5 LPA
+  in-hand salary; choosing a model on the test set in a conflict story; slicing and
+  comprehensions tested before being taught; a tuple try-it whose fix contradicted the lesson;
+  and depth 3 losing all decorator practice. All accepted findings were applied and re-gated.
+
+### 2. Data state (dev)
+- Self-introduction: v1 stays **PUBLISHED** (students see it); the slide version is v2
+  **UNDER_REVIEW**.
+- Internship, HR and aptitude: v1 drafts refreshed with the slide versions, **UNDER_REVIEW**.
+- Core Python concepts: v1 **UNDER_REVIEW**.
+- Nothing was published on anyone's behalf.
+
+### 3. Tests
+- `pnpm check` is green: 389 API tests (including the lesson library with all five lessons), 25
+  content tests (slide decks, the `sequence` visual, the slide-title rule), 10 renderer tests,
+  3 contracts tests, and both app builds.
+- Browser checks on the isolated stack: every lesson walked as a student on a phone (slides,
+  try-its, the decorator playground to PASS, the exceptions explorer), with no overflow and no
+  console errors.
+
+### 4. Next
+- Python for Interviews continues: `python-oop`, then `python-coding-round`.
+
+## Pilot v2.2 report: hiring data, animated visuals and the first lessons (2026-11-06)
+
+### 1. What was implemented
+- **Hiring Intelligence in the platform (super admins only).** The user allowed the dashboard export
+  in the repo, visible only to super admins.
+  - The export is stored gzipped at `apps/api/data/hiring-intelligence/hiring-2026-10-30.json.gz`
+    (909 KB). `db:bootstrap` and the seed load it into the new `hiring_snapshot`,
+    `hiring_opportunity` and `hiring_question` tables when the database has none.
+  - The ML Engineer family and theme rules are ported from the Python scripts to
+    `modules/hiring/hiring-rules.ts`. A test proves parity with the published evidence (3,293
+    questions, 72 companies, the same themes). Every question is mapped to a curriculum topic.
+  - `GET/POST /api/v1/admin/hiring…` sits behind `requireSuperAdmin`. Admin → **Hiring data**
+    (super-admin nav only) has three tabs:
+    - the ML Engineer evidence table, recomputed live;
+    - every question, filtered by curriculum topic, theme, round, company, domain, difficulty,
+      CTC band or search;
+    - the openings.
+    A super admin can upload a newer export, which replaces the old one (audited).
+- **Animated visuals.** A new step kind, `VISUAL` ("Watch it"), with three vetted scenes:
+  - `chat`: a mock interview with typing dots, coach notes and weak/strong takes;
+  - `anatomy`: an answer split into colour-coded parts on a timeline;
+  - `array`: number rows with gap labels, pointers and windows.
+
+  Scenes play when they scroll into view and have pause, step and replay. They respect reduced
+  motion and carry alt text. The schema, student schema, AI generation schema, prompts (`@3`),
+  time estimates and reviewer checklist all know the new kind. Migration `visual_sections`.
+- **Lesson library.**
+  - Hand-written lessons live in `apps/api/src/modules/content/library/`.
+  - `pnpm lessons:sync` loads them **for review only**:
+    - it creates missing lessons;
+    - it refreshes library drafts nobody has touched;
+    - it opens a new review version when a published lesson changes;
+    - it never publishes and never overwrites a person's work.
+  - A test holds every library lesson to the schema, the title rule, the standard style budgets,
+    the subtopic's concepts and a complete path at each curriculum depth (35 minutes or less).
+- **Topic 1 (Self-Introduction & HR Round) written, built and reviewed.** All four lessons are
+  grounded in the real questions for each theme:
+
+  | Lesson | Depth 1 (3–6) | Depth 2 (8–12) | Visuals |
+  |---|---|---|---|
+  | Self-introduction pitch | 5 steps (all students study it at depth 2) | 11 steps, 25 min | 60-second anatomy, weak vs strong chat |
+  | Internship and experience story | 10 steps, 20 min | 14 steps, 27 min | STAR anatomy, "we" vs "I" chat, challenge-story anatomy |
+  | HR and behavioural questions | 9 steps, 16 min | 12 steps, 23 min | generic vs specific chat, weakness anatomy |
+  | Aptitude and logical reasoning (optional, 3–6 only) | 11 steps, 21 min | – | two number-series arrays, guesstimate anatomy |
+
+  Every lesson went through create → build → independent review → update:
+  - **Create:** quality gates on schema, style and each depth path.
+  - **Build:** synced to an isolated stack, published there only, then walked as a student on a
+    phone with every check answered. The depth-2 path was checked in the admin preview.
+  - **Review:** a separate reviewer read each lesson without seeing my own assessment.
+  - **Update:** every accepted finding was applied, and the lesson was gated and walked again.
+
+  The reviews caught several real problems:
+  - a wrong graduation year;
+  - an "82% of what" metric;
+  - inconsistent scores across stories;
+  - a leaky feature;
+  - salary anchoring for 8–12 students;
+  - CTC vs in-hand pay;
+  - bond red flags;
+  - an outdated car-sales figure.
+- **Fixes found while building:**
+  - The admin console overflowed sideways on phones on every page, because of the shell and
+    wide tables.
+  - Lesson tables were clipped on phones; two-column tables now fit the screen.
+  - A wide visual could stretch the lesson page.
+  - The lesson-complete screen still said practice was "coming soon"; it now counts and links
+    the tagged questions.
+  - A title rule now catches a "?" anywhere in a title.
+
+### 2. Data state (dev)
+- **Hiring data:** imported (25,715 questions).
+- **Topic 1 lessons:** all four are v1 **UNDER_REVIEW**, waiting for a person to publish.
+- **Curriculum seed text:** now says "about a minute" (this changes new environments only).
+
+### 3. Tests
+- `pnpm check` is green:
+  - 380+ API tests, now including hiring and the lesson library;
+  - content, contracts and renderer tests;
+  - builds.
+- Browser checks ran on the isolated stack: every lesson walked as a student on a phone with no
+  overflow and no console errors, plus the hiring page on desktop and phone.
+
+### 4. Next
+- Topic 2 (Python for Interviews) in the same loop. It needs code-running examples, and the
+  `array` scene already covers two pointers, binary search and sliding windows.
+- Each later topic adds the scene types it needs, such as charts for model evaluation and a
+  network for deep learning.
+
+## Pilot v2.1 report: ML Engineer curriculum from interview data (2026-11-05)
+
+### 1. What was implemented
+- **Interview evidence.** The Hiring Intelligence export (25,715 questions, 456 companies) was
+  analysed for the ML Engineer family: 72 companies, 80 openings, 3,293 questions. The method,
+  numbers and limits are in `docs/11-mle-interview-evidence.md`, and the scripts are in
+  `tools/hiring-intelligence/` (no data in the repo).
+  - Project deep-dive is asked at 92% of companies and self-introduction at 72%. Then come Python
+    (57%), GenAI (56%; 83% at 8+ LPA), ML fundamentals (49%; 67% of ML-titled roles), deployment
+    (40%), deep learning (38%; 52%) and SQL (31%).
+  - The DSML master sheet was used only to check coverage. Its Course-IDs tab gives the portal
+    `c_id`s for practice links.
+- **ML Engineer curriculum v2** (`mle-curriculum.ts`): 13 interview-prep topics and 48 subtopics.
+  Priorities follow company coverage; 3–6 LPA depths follow the under-8-LPA evidence and 8–12 LPA
+  follows the 8+ evidence. Every item says why it is there.
+  - 11 new topics (Self-Introduction & HR, Python for Interviews, ML Fundamentals, Data
+    Preparation, Classical ML Algorithms, Model Evaluation, Project Deep-Dive, Deep Learning,
+    LLMs & Agents, SQL, Model Deployment), plus the existing Embeddings and RAG topics. RAG gains
+    a new subtopic, *Fine-tuning vs RAG*.
+  - Order: introduction first, then Python, ML, data, algorithms, evaluation, project deep-dive,
+    deep learning, LLMs, embeddings, RAG, SQL and deployment last.
+  - Measured totals: 3–6 LPA is **32 h 20 min** (the core without optional items is about 27 h).
+    It runs 7 days past a 30-day target at 60 min/day and fits at 75 min/day. 8–12 LPA is
+    **53 h 35 min** and needs about 2 h/day.
+- **One-time upgrade** (`upgradeMleCurriculum`, marker `bootstrap.mle-curriculum-v2`):
+  - Where the interim v1 is still published (and no draft is open), v2 is published as a new
+    version, and every student on it gets an update **proposal** to accept.
+  - A curriculum an admin edited is left alone.
+  - The ML Engineer role card (interview focus, competencies, self-check areas, now including
+    GenAI) is refreshed if it is still the bootstrap default.
+- **Practice questions tagged to topics:**
+  - Admins tag questions with topics and subtopics (a tag picker over the curriculum), plus an
+    optional description and "asked at" companies.
+  - The sheet import reads topic, subtopic, description and asked-at columns, matched by name.
+    Unknown names are flagged per row.
+  - **Topic pages** list that topic's questions, and each subtopic card shows how many it has.
+  - **The Practice tab** shows every question with its tags and details, and adds a topic filter
+    (`/practice?topic=slug`).
+  - Solve still opens the portal in a new tab.
+- **The 11★ loop for questions.** After opening a question, students rate it (5 faces, tags, and
+  *"What would make this an 11★ question?"*). There is one rating per student, which they can
+  change.
+- **Admin → Feedback** (new): every student rating in one place (lesson steps, lessons, practice
+  questions, pages), filters for written 11★ ideas, and the **11-star map**, Airbnb's method
+  adapted to this platform. It marks *Pilot today* at 6★ and *Next target* at 7★.
+
+### 2. Verified
+- `pnpm check` is green: lint, typecheck, **380 tests** (351 API) and builds.
+- New API tests: the v2 curriculum (priorities, depths, the 30-day fit of the 3–6 core), the
+  upgrade with proposals, skipping admin-edited curricula and idempotency, tags, PATCH that keeps
+  tags, topic-page lists, and the 11★ feedback through to the admin list.
+- Browser check on an isolated stack: 20 of 20 new checks, plus 31 of 32 earlier checks. The one
+  miss is by design: topic pages now list only questions tagged to that topic. 0 console errors.
+- Dev database: v2 published at both packages, with 7 update proposals.
+
+### 3. Database
+- `20261105111455_practice_tags_feedback`: `practice_question_topic`,
+  `practice_question_subtopic`, `practice_question.description` / `asked_at`,
+  `feedback.practice_question_id`, and the `PRACTICE_QUESTION` feedback target.
+- `20261105113000_practice_feedback_constraint`: the feedback check constraint now allows question
+  feedback, with one rating per student and question.
+
+### 4. Next
+- Lessons for the new subtopics: only *Chunking strategies* has one. Generation needs the API key.
+  The real interview questions per subtopic can be fed into generation as playbooks and checks.
+- Decide the daily target with the manager: 75 min/day fits the 3–6 LPA track in 30 days.
+- Sync solved status from the portal.
+
+---
+
+## Pilot v2 report: ML Engineer focus (2026-11-05)
+After the 2026-11-05 review with the manager, the first rollout is narrowed. It is for **one role, ML Engineer**, for the students who cleared the assessments, with a **plan the team sets** instead of choices students make. Every removed choice is **hidden, not deleted**: an admin can switch it back on. See docs/01 §4.1 "Pilot v2".
+
+### 1. What was implemented
+- **Study plan (admin → Study plan)**: one plan for every student.
+  - Daily minutes and study days.
+  - A deadline: none, a fixed date, or *N days after joining* (fair for late joiners).
+  - A note to students, with a live preview of how it looks to them.
+  - The package students are placed in, with the study time per package.
+  - A live estimate: how long the ML Engineer track takes on this plan, the finish date, days to spare or days over the deadline, and one-click paces that fit.
+  - Two switches: *students choose their own study time* and *students choose their package*. Both are off for the pilot.
+  - **Save and apply**: brings every current student in line. A new package means a new goal (the old one stays as history). New time means a re-planned roadmap from today. Progress is always kept.
+- **Students (while the team decides)**:
+  - Onboarding is two steps (role, self-check) plus a review showing "Your study plan · set by your mentors". There is no package step and no time step.
+  - ML Engineer is preselected. The other roles show *Opening soon · Notify me*.
+  - Home shows the mentors' note at the top, the role tagline instead of the package, "See my plan", and a Practice card.
+  - My plan shows "Your study plan": the note, daily target, study days and finish date, plus the read-only timeline. The schedule editor is hidden.
+  - Roadmap: no package in the title, "See my plan", and a read-only deadline warning (no fix buttons).
+  - No package anywhere on student screens: the topic depth note, the calendar file name and the done screen included.
+  - `PUT /student/goal/schedule` is refused (403) while the team sets the time.
+- **Practice tab** (student nav: Home · Roadmap · My plan · **Practice**, also in the phone tab bar):
+  - Questions for the student's role, grouped by category, with search and difficulty filters, and an opened count.
+  - **Solve** opens the question on the NxtWave learning portal in a new tab (like the manager's prototype), and the click is recorded. Opened questions get a tick.
+  - The topic page's Practice tile links to the tab once there are questions.
+- **Admin → Practice**:
+  - Add or edit a question: name, portal link, category, skill, difficulty, minutes, roles (none = all roles), order, published.
+  - **Import from sheet**: paste rows from Google Sheets or CSV, header detected automatically. Every row is checked before import, links already listed are skipped, and rows arrive as drafts unless *Publish right away* is ticked. "Publish all drafts" publishes them in one go.
+  - Per question: students who opened it and total Solve clicks.
+  - Links must be https on NxtWave hosts (`ccbp.in`, `nxtwave.tech`, `nxtwave.in`, `nxtwave.co.in`), checked in the form and on the server.
+- **ML Engineer pilot bootstrap** (`pnpm db:bootstrap` and the dev seed):
+  - ML Engineer goes LIVE and AI Engineer becomes NEXT_UP.
+  - ML Engineer gets published curricula at 3–6 and 8–12 LPA. They reuse the three built topics as an **interim** track, with GenAI marked Medium priority as an extra on top of core ML.
+  - The pilot plan is saved: 60 min, Mon–Sat, 30 days after joining, 3–6 LPA, both pickers hidden.
+  - Active AI Engineer goals move to ML Engineer on the plan.
+  - The switch runs once (marker `bootstrap.mle-pilot`), so later admin changes are never undone.
+- **Lesson step titles: professional and technical**:
+  - A title rule for every style: 2–6 words, leading with the concept or action ("Tune chunk size and overlap", "Evaluate chunking with recall@k"), one term per idea, and no questions, puns, emoji or filler like "Free play" or "Your turn".
+  - Enforced by a computed `title` check (shown in the AI review) and by the prompts (all four bumped to `@2`).
+  - The Gen Z style keeps its hook in the content, not the heading.
+  - All 22 titles of the reference lesson are rewritten. It is the AI's style example, so new drafts follow.
+
+### 2. Verified end to end
+- Browser check in headless Edge on an isolated stack (own database, API and both apps): **32 of 32 checks pass, 0 console errors**.
+- Covered: admin saves and applies the plan; a foreign link is refused; the import flags a bad row and skips a duplicate; the lesson shows the new titles at both depths; sign-up → two-step onboarding → review with the mentors' plan; no package on Home, My plan or Roadmap; nav order; Practice lists, filters and opens the portal in a new tab; the click is counted in admin; phone layout with 4 tabs and no horizontal scroll.
+- The dev database was switched with `pnpm db:bootstrap`: 7 students moved to ML Engineer, all with active roadmaps.
+- The published Chunking lesson got **v2 In review** with only the 22 titles changed. v1 stays live until someone approves and publishes v2.
+
+### 3. Database and API changes
+- Migration `20261105100131_practice_links`: `practice_question` (unique `solve_url`), `practice_question_role`, `practice_open` (one row per student and question, with first and last opened time and a count).
+- Study plan: platform setting `study.plan` (no schema change). Until it is saved, students choose time and package exactly as before.
+- Contracts:
+  - `CompleteOnboardingBody.bracketId` / `.schedule`, `ChangeTargetBody.bracketId` and `OnboardingPlanPreviewBody.bracketId` / `.schedule` are optional. The server requires them only while students choose.
+  - New: `study-plan.ts`, `practice.ts`.
+- Admin API: `GET|PUT /admin/study-plan`, `POST /admin/study-plan/preview`, `GET|POST /admin/practice`, `POST /admin/practice/import`, `PATCH|DELETE /admin/practice/:id`.
+- Student API: `GET /student/study-plan`, `GET /student/practice`, `POST /student/practice/:id/open`.
+
+### 4. Tests
+- 39 new tests across study plan, practice, the ML Engineer pilot bootstrap, the title rule and the reference lesson's titles.
+- `pnpm check` is green: lint, typecheck, **373 tests** (344 API, 16 content, 10 renderers, 3 contracts) and production builds.
+
+### 5. Known gaps and next steps
+- **The MLE topic list is interim.** Share the hiring-intelligence export (companies, rounds, questions for MLE) to derive the real ML / DL / NLP / CV / coding / project-explanation topics. At 60 min a day the interim track takes about 2 weeks (3–6 LPA) of the 30-day window.
+- Solved status on the portal is not synced yet; the Practice tab records opens only (a Metabase sync, as in the prototype, is the next step).
+- The plan is one global plan. Per-cohort plans can come later if batches start on different dates.
+- The manager asked for a PRD (objective, 1-month scope, deployment, login, success metric: at least 50% of the students spending 1 hour a day). It is not written yet.
 
 ---
 

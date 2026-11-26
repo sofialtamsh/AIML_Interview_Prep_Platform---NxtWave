@@ -19,7 +19,14 @@ export interface DepthReport {
   checks: DepthCheck[];
 }
 
-const INTERACTIVE = new Set<Section['kind']>(['CODE_EXPLORER', 'WIDGET', 'PLAYGROUND']);
+/** Steps a student explores or plays with. Topics without code (HR, projects) rely on the last three. */
+const INTERACTIVE = new Set<Section['kind']>([
+  'CODE_EXPLORER',
+  'WIDGET',
+  'PLAYGROUND',
+  'VISUAL',
+  'CARD_DECK',
+]);
 
 export function depthReport(doc: LessonDocument, depth: number, roleSlug: string | null = null) {
   const sections = resolveSections(doc.sections, { depth, roleSlug, skillLevel: 0 });
@@ -44,7 +51,10 @@ export function depthReport(doc: LessonDocument, depth: number, roleSlug: string
     item(
       'interactive',
       sections.some(
-        (s) => INTERACTIVE.has(s.kind) || (s.kind === 'CODE_EXAMPLE' && s.body.runnable),
+        (s) =>
+          INTERACTIVE.has(s.kind) ||
+          (s.kind === 'CODE_EXAMPLE' && s.body.runnable) ||
+          (s.kind === 'SLIDES' && s.body.slides.some((sl) => sl.try)),
       ),
       'Has something to explore or try',
       'Nothing to explore or try at this depth',
@@ -55,11 +65,12 @@ export function depthReport(doc: LessonDocument, depth: number, roleSlug: string
       'Has a knowledge check',
       'No knowledge check at this depth',
     ),
+    // A V1 unit closes on its interview questions and answers instead of a summary card.
     item(
       'summary',
-      sections.at(-1)?.kind === 'SUMMARY',
-      'Ends with a summary',
-      'Does not end with a summary',
+      sections.at(-1)?.kind === 'SUMMARY' || sections.at(-1)?.kind === 'CARD_DECK',
+      'Ends with a summary or interview questions',
+      'Does not end with a summary or interview questions',
     ),
     item(
       'outputs',

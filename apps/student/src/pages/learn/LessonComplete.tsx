@@ -15,6 +15,8 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { formatMinutes } from '../../features/roadmap/parts';
 import { api } from '../../lib/api';
+import { SELF_PACED } from '../../lib/features';
+import { usePractice } from '../../lib/queries';
 
 const FACES = [
   { value: 1, face: '😣', label: "Didn't help" },
@@ -61,8 +63,9 @@ export function LessonComplete({
         <span className="eyebrow">Lesson complete</span>
         <h1 className="text-[clamp(26px,3.4vw,36px)]">{data.lesson.title}</h1>
         <p className="max-w-md text-ink-2">
-          That's one more subtopic ticked off your {data.depth.name.toLowerCase()} plan. Your
-          roadmap is updated.
+          {SELF_PACED
+            ? "That's one more unit done, and your progress is saved. Take a short break, then pick the next one."
+            : `That's one more subtopic ticked off your ${data.depth.name.toLowerCase()} plan. Your roadmap is updated.`}
         </p>
       </header>
 
@@ -101,7 +104,7 @@ export function LessonComplete({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Card className="dotgrid flex flex-col gap-2 p-5">
-          <span className="eyebrow">Next on your roadmap</span>
+          <span className="eyebrow">{SELF_PACED ? 'Next unit' : 'Next on your roadmap'}</span>
           {next ? (
             <>
               <h3 className="font-sans text-[16px] font-semibold tracking-normal">{next.title}</h3>
@@ -119,33 +122,76 @@ export function LessonComplete({
               )}
             </>
           ) : (
-            <p className="text-[14px] text-ink-2">You've reached the end of your roadmap. 🙌</p>
+            <p className="text-[14px] text-ink-2">
+              {SELF_PACED
+                ? 'You have finished every unit. 🙌'
+                : "You've reached the end of your roadmap. 🙌"}
+            </p>
           )}
         </Card>
-        <Card className="flex flex-col gap-2 p-5">
-          <span className="flex items-center justify-between">
-            <span className="eyebrow">Practice this</span>
-            <Badge tone="next">Coming soon</Badge>
-          </span>
-          <span className="flex items-center gap-2 font-sans text-[16px] font-semibold">
-            <Dumbbell className="size-4 text-brand" aria-hidden /> Interview questions
-          </span>
-          <p className="text-[13px] text-ink-2">
-            Questions on {data.subtopic.title.toLowerCase()} at your level arrive with the question
-            bank.
-          </p>
-        </Card>
+        <PracticeNext data={data} />
       </div>
 
       <div className="flex flex-wrap justify-center gap-2">
-        <Link to={`/topics/${topicSlug}`} className={buttonClass('secondary', 'md')}>
-          Back to {data.subtopic.topic.title}
+        <Link
+          to={SELF_PACED ? '/roadmap' : `/topics/${topicSlug}`}
+          className={buttonClass('secondary', 'md')}
+        >
+          {SELF_PACED ? 'Back to all units' : `Back to ${data.subtopic.topic.title}`}
         </Link>
         <Button variant="ghost" onClick={onReview}>
           <RotateCcw className="size-4" aria-hidden /> Review this lesson
         </Button>
       </div>
     </div>
+  );
+}
+
+/** The practice questions tagged to this subtopic (or else its topic), solved on the portal. */
+function PracticeNext({ data }: { data: LessonResponse }) {
+  const practice = usePractice();
+  const topic = data.subtopic.topic;
+  const items = practice.data?.items ?? [];
+  const forSubtopic = items.filter((q) =>
+    q.tags.some((t) => t.topicSlug === topic.slug && t.subtopicSlug === data.subtopic.slug),
+  ).length;
+  const forTopic = items.filter((q) => q.tags.some((t) => t.topicSlug === topic.slug)).length;
+  const count = forSubtopic || forTopic;
+  return (
+    <Card className="flex flex-col gap-2 p-5">
+      <span className="flex items-center justify-between">
+        <span className="eyebrow">Practice this</span>
+        {count > 0 && <Badge tone="live">{count} ready</Badge>}
+      </span>
+      <span className="flex items-center gap-2 font-sans text-[16px] font-semibold">
+        <Dumbbell className="size-4 text-brand" aria-hidden /> Interview questions
+      </span>
+      {count > 0 ? (
+        <>
+          <p className="text-[13px] text-ink-2">
+            {count} question{count === 1 ? '' : 's'} on{' '}
+            {forSubtopic ? data.subtopic.title.toLowerCase() : topic.title}, solved on the NxtWave
+            learning portal.
+          </p>
+          <Link
+            to={`/topics/${topic.slug}#practice`}
+            className={cn(buttonClass('secondary', 'md'), 'mt-auto w-fit')}
+          >
+            See the questions <ArrowRight className="size-4" aria-hidden />
+          </Link>
+        </>
+      ) : (
+        <>
+          <p className="text-[13px] text-ink-2">
+            Questions for {topic.title} are being added. Meanwhile, the Practice tab has questions
+            from other topics.
+          </p>
+          <Link to="/practice" className={cn(buttonClass('ghost', 'md'), 'mt-auto w-fit px-0')}>
+            Open Practice <ArrowRight className="size-4" aria-hidden />
+          </Link>
+        </>
+      )}
+    </Card>
   );
 }
 

@@ -317,6 +317,70 @@ describe('admin: edit, review and publish', () => {
     ).toBe('ARCHIVED');
   });
 
+  it('deletes old versions for good, but never one that is live, in progress or in use', async () => {
+    const creds = await createAdmin('owner@nxtwave.co.in', 'Owner-Lead-2026', 'SUPER_ADMIN');
+    const owner = browser(app, ADMIN_ORIGIN, clock.now);
+    expect((await owner.post('/api/v1/admin/auth/login', creds)).statusCode).toBe(200);
+
+    const v1 = await importLesson();
+    await publish(v1);
+    const learner = await student('LPA_3_6');
+    const lesson = await lessonOf(learner);
+    const saved = await learner.put(`${LESSON}/progress`, {
+      moduleVersionId: lesson.lesson.moduleVersionId,
+      sectionKey: lesson.lesson.sections[0]?.key,
+      completed: true,
+      timeSpentSec: 30,
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+
+    const v2 = await importLesson();
+    await publish(v2);
+    const v3 = await importLesson();
+    await publish(v3);
+    const v4 = await importLesson(); // still being worked on
+
+    // History is a super admin's to delete.
+    expect((await admin.del(`${CONTENT}/versions/${v2}`)).statusCode).toBe(403);
+    // The live version, a working one and one a student is part-way through all stay.
+    expect(errorCode(await owner.del(`${CONTENT}/versions/${v3}`))).toBe('CONFLICT');
+    expect(errorCode(await owner.del(`${CONTENT}/versions/${v4}`))).toBe('CONFLICT');
+    expect(errorCode(await owner.del(`${CONTENT}/versions/${v1}`))).toBe('CONFLICT');
+    // Plain history goes, and stays gone.
+    expect((await owner.del(`${CONTENT}/versions/${v2}`)).statusCode).toBe(200);
+    expect((await owner.del(`${CONTENT}/versions/${v2}`)).statusCode).toBe(404);
+    const left = json<LessonModuleResponse>(await admin.get(`${CONTENT}/lessons/${chunking}`));
+    expect(left.versions.map((v) => v.versionNumber).sort()).toEqual([1, 3, 4]);
+    // The student still gets the live lesson.
+    expect((await lessonOf(learner)).lesson.moduleVersionId).toBe(v3);
+  });
+
+  it('never publishes a lesson that quotes internal interview data', async () => {
+    const leaky = miniLesson('Self-introduction', {
+      sections: [
+        {
+          key: 'hook',
+          kind: 'HOOK',
+          depthRank: 1,
+          body: {
+            scenario: 'The interviewer says: "Tell me about yourself."',
+            bridge: 'In our interview data it came up at 39 of 72 companies.',
+          },
+        },
+        { key: 'summary', kind: 'SUMMARY', depthRank: 1, body: { takeaways: ['Keep it short.'] } },
+      ],
+    });
+    const id = await importLesson(chunking, leaky);
+    const v = await versionOf(id);
+    await admin.post(`${CONTENT}/versions/${id}/submit`, { editSeq: v.version.editSeq });
+    await admin.post(`${CONTENT}/versions/${id}/review`, { decision: 'APPROVED' });
+    const res = await admin.post(`${CONTENT}/versions/${id}/publish`, { changeNote: 'Leaky' });
+    expect(res.statusCode).toBe(400);
+    expect(errorCode(res)).toBe('VALIDATION_ERROR');
+    expect(res.body).toContain('"hook"');
+    expect((await versionOf(id)).version.status).toBe('APPROVED');
+  });
+
   it('keeps concepts that lessons use', async () => {
     await importLesson();
     const concept = await testDb().concept.findUniqueOrThrow({
@@ -559,6 +623,17 @@ describe('student: lesson player', () => {
     expect(item()?.status).toBe('DONE');
     expect(roadmap.roadmap?.totals.doneMinutes).toBeGreaterThan(0);
 
+    // The team's analytics get one row per saved step (with its study time) and one for the
+    // finished lesson. The refused save and the early "complete" left nothing behind.
+    const activity = await testDb().studentActivity.findMany();
+    const steps = activity.filter((a) => a.kind === 'LESSON_STEP');
+    expect(steps).toHaveLength(keys.length + 1);
+    expect(steps.reduce((t, a) => t + a.value, 0)).toBe((keys.length - 1) * 90 + 1800);
+    expect(steps[0]?.target).toBe(`rag/chunking-strategies#${keys[0]}`);
+    expect(activity.filter((a) => a.kind === 'LESSON_COMPLETED').map((a) => a.target)).toEqual([
+      'rag/chunking-strategies',
+    ]);
+
     const topic = json<TopicPageResponse>(await learner.get('/api/v1/student/topics/rag'));
     expect(topic.learn).toEqual({ available: true, lessons: 1, completed: 1 });
     expect(topic.items.find((i) => i.slug === 'chunking-strategies')?.lesson).toMatchObject({
@@ -638,6 +713,15 @@ describe('student: lesson player', () => {
       tags: ['visual_unclear'],
       text: 'The arrows confused me',
     });
+    // A thumb tapped again later must not wipe the comment written before it.
+    await a.post('/api/v1/student/feedback', { ...target, thumbs: 'DOWN' });
+    expect(
+      (
+        await testDb().feedback.findFirstOrThrow({
+          where: { targetType: 'SECTION', text: { not: null } },
+        })
+      ).text,
+    ).toBe('The arrows confused me');
     await b.post('/api/v1/student/feedback', { ...target, thumbs: 'DOWN', tags: ['too_fast'] });
     await a.post('/api/v1/student/feedback', {
       target: 'LESSON',

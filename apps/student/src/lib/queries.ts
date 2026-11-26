@@ -4,6 +4,8 @@ import type {
   OnboardingState,
   RoadmapResponse,
   StudentCatalogResponse,
+  StudentPracticeResponse,
+  StudentStudyPlan,
   TopicPageResponse,
 } from '@app/contracts';
 import { useQuery } from '@tanstack/react-query';
@@ -14,6 +16,8 @@ export const keys = {
   goal: ['goal'] as const,
   onboarding: ['onboarding'] as const,
   roadmap: ['roadmap'] as const,
+  studyPlan: ['study-plan'] as const,
+  practice: ['practice'] as const,
   topic: (slug: string) => ['topic', slug] as const,
   lesson: (topicSlug: string, subtopicSlug: string) => ['lesson', topicSlug, subtopicSlug] as const,
 };
@@ -37,10 +41,28 @@ export const useOnboarding = () =>
 export const useRoadmap = () =>
   useQuery({ queryKey: keys.roadmap, queryFn: () => api.get<RoadmapResponse>('/student/roadmap') });
 
-export const useTopic = (slug: string) =>
+/**
+ * The team's study plan: daily time, days, deadline and a note, plus which choices students
+ * make themselves. While a choice is the team's, its picker stays hidden.
+ */
+export const useStudyPlan = () =>
+  useQuery({
+    queryKey: keys.studyPlan,
+    queryFn: () => api.get<StudentStudyPlan>('/student/study-plan'),
+    staleTime: 5 * 60_000,
+  });
+
+export const usePractice = () =>
+  useQuery({
+    queryKey: keys.practice,
+    queryFn: () => api.get<StudentPracticeResponse>('/student/practice'),
+  });
+
+export const useTopic = (slug: string, enabled = true) =>
   useQuery({
     queryKey: keys.topic(slug),
     queryFn: () => api.get<TopicPageResponse>(`/student/topics/${encodeURIComponent(slug)}`),
+    enabled,
   });
 
 export const lessonPath = (topicSlug: string, subtopicSlug: string) =>

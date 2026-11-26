@@ -1,12 +1,17 @@
 import { FullPageSpinner } from '@app/ui';
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter, Navigate } from 'react-router';
 import { GuestOnly, RequireAuth, RequireOnboarded } from './lib/auth';
+import { PRACTICE_HUB, SELF_PACED } from './lib/features';
 import { AppShell } from './pages/app/AppShell';
 import { HomePage } from './pages/app/HomePage';
+import { LearnPage } from './pages/app/LearnPage';
 import { PlanPage } from './pages/app/PlanPage';
+import { PracticeHubPage } from './pages/app/PracticeHubPage';
+import { PracticePage } from './pages/app/PracticePage';
 import { ProfilePage } from './pages/app/ProfilePage';
 import { RoadmapPage } from './pages/app/RoadmapPage';
+import { SubjectPage } from './pages/app/SubjectPage';
 import { TopicPage } from './pages/app/TopicPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { LoginPage } from './pages/auth/LoginPage';
@@ -71,10 +76,13 @@ export const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { index: true, element: <HomePage /> },
-      { path: 'roadmap', element: <RoadmapPage /> },
+      // Self-paced (lib/features.ts): Learn and a subject's units replace the dashboard and
+      // the dated roadmap, and there is no plan page to open.
+      { index: true, element: SELF_PACED ? <LearnPage /> : <HomePage /> },
+      { path: 'roadmap', element: SELF_PACED ? <SubjectPage /> : <RoadmapPage /> },
       { path: 'topics/:slug', element: <TopicPage /> },
-      { path: 'plan', element: <PlanPage /> },
+      { path: 'plan', element: SELF_PACED ? <Navigate to="/" replace /> : <PlanPage /> },
+      { path: 'practice', element: PRACTICE_HUB ? <PracticeHubPage /> : <PracticePage /> },
       { path: 'profile', element: <ProfilePage /> },
     ],
   },

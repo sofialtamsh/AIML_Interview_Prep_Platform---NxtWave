@@ -24,7 +24,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
   danger: 'bg-bad text-white border-bad hover:brightness-110',
 };
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-[13px] rounded-lg',
+  // `min-h-10` keeps the small button a 40px touch target on phones without changing its desktop look.
+  sm: 'px-3 py-1.5 text-[13px] rounded-lg max-sm:min-h-10',
   md: 'px-4 py-2.5 text-sm rounded-[10px]',
   lg: 'px-5 py-3 text-[15px] rounded-xl',
 };

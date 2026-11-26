@@ -48,6 +48,13 @@ const EnvSchema = z.object({
   SMTP_PASS: z.string().optional(),
   MAIL_FROM: z.string().default('NxtWave Prep <no-reply@prep.local>'),
 
+  /**
+   * Runs the background jobs (email delivery, AI agents, nightly clean-up) inside the API process
+   * too, so a small deployment needs one server instead of an API and a separate worker. Leave it
+   * off when a worker runs, or every job is processed by both.
+   */
+  RUN_JOBS_IN_API: bool.default(false),
+
   REGISTRATION_POLICY_DEFAULT: RegistrationPolicy.default('OPEN'),
   REQUIRE_EMAIL_VERIFICATION: bool.default(false),
 

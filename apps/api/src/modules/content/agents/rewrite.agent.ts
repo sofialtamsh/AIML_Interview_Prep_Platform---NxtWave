@@ -6,6 +6,7 @@
 import {
   fromGenSection,
   GenSection,
+  internalDataIssues,
   LessonDocument,
   llmJsonSchema,
   Section,
@@ -113,12 +114,14 @@ export async function rewriteSection(ctx: AppContext, run: JobRun, input: Rewrit
         if (!concepts.has(c))
           problems.push({ path: 'conceptKeys', message: `Unknown concept "${c}"` });
       }
-      const parsed = Section.safeParse(fromGenSection(g));
+      const parsed = Section.safeParse(keepDraw(fromGenSection(g), current.section));
       if (!parsed.success) {
         for (const i of parsed.error.issues)
           problems.push({ path: i.path.join('.'), message: i.message });
         return problems;
       }
+      for (const i of internalDataIssues(parsed.data))
+        problems.push({ path: '(section)', message: i.message });
       const whole = LessonDocument.safeParse({
         ...document,
         sections: document.sections.map((s) => (s.key === input.sectionKey ? parsed.data : s)),
@@ -134,7 +137,7 @@ export async function rewriteSection(ctx: AppContext, run: JobRun, input: Rewrit
 
   // Run its code, with the earlier examples it may build on.
   await run.stage('Running the code', 70);
-  const rewritten = Section.parse(fromGenSection(gen));
+  const rewritten = Section.parse(keepDraw(fromGenSection(gen), current.section));
   const index = document.sections.findIndex((s) => s.key === input.sectionKey);
   const context = document.sections
     .slice(0, index)
@@ -163,4 +166,16 @@ export async function rewriteSection(ctx: AppContext, run: JobRun, input: Rewrit
     newRevisionId,
     codeChecks: mine,
   };
+}
+
+/**
+ * The AI's section schema has no quiz pool, so a rewritten quiz would lose its `draw` and then
+ * fail validation for holding too many questions. It keeps the draw it had, while the rewrite
+ * still returns more questions than that.
+ */
+function keepDraw(raw: unknown, was: Section): unknown {
+  if (was.kind !== 'KNOWLEDGE_CHECK' || was.body.draw === undefined) return raw;
+  const next = raw as { body?: { items?: unknown[] } };
+  if (!next.body?.items || next.body.items.length <= was.body.draw) return raw;
+  return { ...next, body: { ...next.body, draw: was.body.draw } };
 }

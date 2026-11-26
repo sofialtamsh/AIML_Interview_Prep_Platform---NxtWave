@@ -48,7 +48,7 @@ export function CurriculumPage() {
   });
 
   return (
-    <div className="grid gap-5 animate-rise">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 animate-rise">
       <PageHeader
         eyebrow="Content"
         title="Curriculum"
@@ -92,7 +92,8 @@ function CurriculaTab({
     index.data.targets.find((t) => t.roleId === roleId && t.bracketId === bracketId);
 
   return (
-    <div className="grid gap-5">
+    // `minmax(0,1fr)`: without it the column grows to the widest table and the page scrolls sideways.
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       <Card className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-sm">
           <thead>

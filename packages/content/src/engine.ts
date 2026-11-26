@@ -68,7 +68,9 @@ const words = (s: string) => (s.match(/\S+/g) ?? []).length;
 function textOf(v: unknown): string[] {
   if (typeof v === 'string') return [v];
   if (Array.isArray(v)) return v.flatMap(textOf);
-  if (v && typeof v === 'object') return Object.values(v).flatMap(textOf);
+  if (v && typeof v === 'object')
+    // A slide's narration is spoken in play mode only, so it adds no reading time.
+    return Object.entries(v).flatMap(([k, x]) => (k === 'narration' ? [] : textOf(x)));
   return [];
 }
 
@@ -83,9 +85,27 @@ export function estimateSectionMinutes(s: Section): number {
     case 'DIAGRAM':
       seconds += s.body.steps.length * 20;
       break;
-    case 'KNOWLEDGE_CHECK':
-      seconds += s.body.items.length * 45;
+    case 'VISUAL': {
+      const scene = s.body.scene;
+      const frames =
+        scene.type === 'chat'
+          ? scene.takes.reduce((a, t) => a + t.messages.length, 0)
+          : scene.type === 'anatomy'
+            ? scene.parts.length
+            : scene.frames.length;
+      seconds += frames * 8;
       break;
+    }
+    case 'SLIDES':
+      // Reading time is counted above; add a little per slide and more per try-it.
+      seconds += s.body.slides.reduce((a, sl) => a + (sl.try ? 45 : 10), 0);
+      break;
+    case 'KNOWLEDGE_CHECK': {
+      // A quiz pool is read and answered one attempt at a time: `draw` questions, not all of them.
+      const shown = Math.min(s.body.items.length, s.body.draw ?? s.body.items.length);
+      seconds = seconds * (shown / s.body.items.length) + shown * 45;
+      break;
+    }
     case 'CODE_EXAMPLE':
       seconds += s.body.runnable ? 120 : 30;
       break;

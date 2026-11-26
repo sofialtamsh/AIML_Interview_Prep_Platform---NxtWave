@@ -61,7 +61,7 @@ export function SignupPage() {
         {message && <Alert tone="bad">{message}</Alert>}
         {providers.data?.google && (
           <>
-            <GoogleButton href={googleStartUrl(null)} label="Sign up with Google" />
+            <GoogleButton href={googleStartUrl(null)} />
             <OrDivider>or with your email</OrDivider>
           </>
         )}

@@ -25,6 +25,45 @@ export interface LessonRuntime {
   onAttempt?(sectionKey: string, itemKey: string, record: AttemptRecord): void;
   /** Prefix for per-viewer drafts kept in this browser (playground code). */
   storagePrefix: string;
+  /** Which narrator reads the slides aloud: courses alternate between two voices (0 and 1). */
+  voice?: number;
+  /**
+   * Offers the read-aloud voice (the device's text-to-speech) in slide decks. Off unless the
+   * host turns it on: with it off, no listen control is drawn and nothing is ever spoken.
+   */
+  narration?: boolean;
+  /**
+   * A step with its own inner sequence (a lab's walkthrough) reports where it is, so the host's
+   * one "next" button can walk that sequence before it leaves the step. Null when the step ends.
+   */
+  reportFlow?(flow: StepFlow | null): void;
+  /** Leaves this step for the next one in the lesson; absent where there is none (a preview). */
+  advance?: { label: string; go(): void };
+}
+
+/**
+ * Where a step's inner sequence stands: `index` runs 0 … count, and `count` means it is done
+ * (a lab's free play, a deck's last slide). The host shows `label` beside its button and puts
+ * `next` on the button while the sequence is not done.
+ */
+export interface StepFlow {
+  index: number;
+  count: number;
+  go(index: number): void;
+  /** "Walkthrough · step 2 of 7", "Slide 2 of 6". */
+  label: string;
+  /** "Next step", "Next slide". */
+  next: string;
+}
+
+/** The narrator for the lesson on screen; decks outside a lesson use the first voice. */
+export function useNarratorVoice(): number {
+  return useContext(Ctx)?.voice ?? 0;
+}
+
+/** Whether slide decks may read aloud here. Off by default, and outside a lesson. */
+export function useNarration(): boolean {
+  return useContext(Ctx)?.narration === true;
 }
 
 const Ctx = createContext<LessonRuntime | null>(null);
@@ -37,6 +76,11 @@ export function LessonRuntimeProvider({
   children: ReactNode;
 }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/** The runtime where there is one: parts that also render outside a lesson use this. */
+export function useOptionalRuntime(): LessonRuntime | null {
+  return useContext(Ctx);
 }
 
 export function useLessonRuntime(): LessonRuntime {

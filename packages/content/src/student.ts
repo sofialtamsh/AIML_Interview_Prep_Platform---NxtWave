@@ -18,7 +18,9 @@ import {
   PlaygroundBody,
   Rich,
   type Section,
+  SlidesBody,
   SummaryBody,
+  VisualBody,
   WidgetBody,
 } from './schema';
 
@@ -81,13 +83,18 @@ export const StudentSection = z.discriminatedUnion('kind', [
   z.object({ ...envelope, kind: z.literal('EXPLANATION'), body: ExplanationBody }),
   z.object({ ...envelope, kind: z.literal('CARD_DECK'), body: CardDeckBody }),
   z.object({ ...envelope, kind: z.literal('DIAGRAM'), body: DiagramBody }),
+  z.object({ ...envelope, kind: z.literal('VISUAL'), body: VisualBody }),
+  // Slides carry no secrets: their try-it moments are ungraded warm-ups.
+  z.object({ ...envelope, kind: z.literal('SLIDES'), body: SlidesBody }),
   z.object({ ...envelope, kind: z.literal('CODE_EXAMPLE'), body: CodeExampleBody }),
   z.object({ ...envelope, kind: z.literal('CODE_EXPLORER'), body: CodeExplorerBody }),
   z.object({ ...envelope, kind: z.literal('WIDGET'), body: WidgetBody }),
   z.object({
     ...envelope,
     kind: z.literal('KNOWLEDGE_CHECK'),
-    body: z.object({ items: z.array(StudentCheckItem) }),
+    // With `draw`, `items` is the whole pool (questions only, never answers): the player draws
+    // each attempt's questions from it and the server still grades every answer.
+    body: z.object({ items: z.array(StudentCheckItem), draw: z.number().int().optional() }),
   }),
   z.object({ ...envelope, kind: z.literal('PLAYGROUND'), body: StudentPlaygroundBody }),
   z.object({ ...envelope, kind: z.literal('CALLOUT'), body: CalloutBody }),
@@ -102,7 +109,12 @@ function stripItem(
   switch (item.type) {
     case 'mcq':
     case 'multi':
-      return { key: item.key, type: item.type, prompt: item.prompt, options: item.options };
+      return {
+        key: item.key,
+        type: item.type,
+        prompt: item.prompt,
+        options: shuffleStable(item.options, item.key),
+      };
     case 'fill_blank':
       return { key: item.key, type: item.type, prompt: item.prompt, template: item.template };
     case 'predict_output':
@@ -112,7 +124,7 @@ function stripItem(
         prompt: item.prompt,
         language: item.language,
         code: item.code,
-        options: item.options,
+        options: shuffleStable(item.options, item.key),
       };
     case 'order_steps':
       return {
@@ -127,10 +139,11 @@ function stripItem(
 }
 
 /**
- * Steps are authored in the correct order, so they must not reach the student that way.
- * A deterministic shuffle (seeded by the item key) keeps the order stable between visits.
+ * Authors tend to write the right answer first (and steps in the correct order), so options and
+ * steps never reach the student in the authored order. A deterministic shuffle (seeded by the
+ * item key) keeps the order stable between visits; grading uses ids, so it is unaffected.
  */
-function shuffleStable<T>(list: T[], seed: string): T[] {
+export function shuffleStable<T>(list: T[], seed: string): T[] {
   let h = 2166136261;
   for (const c of seed) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
   const out = [...list];
@@ -159,7 +172,14 @@ export function toStudentSection(
   };
   switch (s.kind) {
     case 'KNOWLEDGE_CHECK':
-      return { ...base, kind: s.kind, body: { items: s.body.items.map(stripItem) } };
+      return {
+        ...base,
+        kind: s.kind,
+        body: {
+          items: s.body.items.map(stripItem),
+          ...(s.body.draw === undefined ? {} : { draw: s.body.draw }),
+        },
+      };
     case 'PLAYGROUND': {
       const { solution: _hidden, ...rest } = s.body;
       return { ...base, kind: s.kind, body: { ...rest, hasSolution: true } };

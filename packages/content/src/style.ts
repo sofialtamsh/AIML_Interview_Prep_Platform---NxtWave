@@ -27,7 +27,16 @@ export interface StyleDefinition {
   guide: string[];
 }
 
+/**
+ * Step titles (content-team decision, 2026-11-05): professional, technical and easy to scan,
+ * never gimmicky. The player already shows the step type ("Quick check", "Your turn"…).
+ */
+export const TITLE_RULE =
+  'Step titles: 2–6 words, technical and easy to scan, the way an engineer titles a section. Lead with the concept or the action the step covers ("Tune chunk size and overlap", "Sentence-aware chunking", "Evaluate chunking with recall@k"). Use the same term for the same idea everywhere. No questions, puns, slang or emoji, and no filler like "Free play", "Your turn" or "Quick check": the player already shows the step type.';
+export const TITLE_MAX_WORDS = 7;
+
 const SHARED_GUIDE = [
+  TITLE_RULE,
   'Write like a great mentor talking to one student: "you", contractions, warm and direct.',
   'Hook first: open with a relatable problem before any definition. Simple idea before the formal one.',
   'Use everyday Indian contexts where they fit naturally (UPI, food delivery, IRCTC, cricket, placements). Never force them.',
@@ -48,7 +57,7 @@ export const STYLES: Record<StyleKey, StyleDefinition> = {
       'One idea per card, paragraph or bullet. Short sentences (about 12 words).',
       'Prefer showing over telling: story cards (layout "swipe"), explorers, widgets and diagrams over paragraphs.',
       'Use "swipe" card decks for key ideas, with one emoji per card that matches the idea.',
-      'Headings are punchy questions or claims ("Why not one giant chunk?"), not textbook labels.',
+      'The hook lives in the content (the scenario, the card, the explorer), not in the step title: titles stay short and technical.',
       'Fun, never cringe: at most one emoji per card or block, no memes, no hype words.',
     ],
   },
@@ -78,8 +87,11 @@ export const STYLES: Record<StyleKey, StyleDefinition> = {
 
 /** Fields that hold code, identifiers or settings rather than prose. */
 const NON_PROSE = new Set([
+  // Spoken in play mode only: it adds no reading time and is not on the slide.
+  'narration',
   'key',
   'id',
+  'name',
   'kind',
   'type',
   'layout',
@@ -96,7 +108,6 @@ const NON_PROSE = new Set([
   'value',
   'widget',
   'tone',
-  'lines',
   'highlight',
   'from',
   'to',
@@ -106,11 +117,28 @@ const NON_PROSE = new Set([
   'roleScope',
   'slotKey',
   'params',
+  // Slide decks: code, icons and settings, not prose.
+  'starter',
+  'expected',
+  'icon',
+  'better',
+  'accent',
+  'filename',
+  'correct',
+  'terms',
+  'ops',
+  // A slide table's cells are figures read at a glance; its column headings still count.
+  'cells',
+  'totals',
+  // Screen-reader descriptions of visuals: they restate what the picture shows, so they don't
+  // count against the reading budget a sighted student sees.
+  'altText',
 ]);
 
-/** Every block of prose in a step (paragraphs, bullets, card faces…), code excluded. */
+/** Every block of prose in a step (paragraphs, bullets, card faces…), code excluded. A text with
+ *  blank lines is several paragraphs, exactly as the player renders it. */
 export function proseBlocks(body: unknown): string[] {
-  if (typeof body === 'string') return [body];
+  if (typeof body === 'string') return body.split(/\n\s*\n/).filter((p) => p.trim());
   if (Array.isArray(body)) return body.flatMap(proseBlocks);
   if (body && typeof body === 'object') {
     return Object.entries(body as Record<string, unknown>).flatMap(([k, v]) =>
@@ -166,8 +194,53 @@ export function readabilityOf(section: Pick<Section, 'key' | 'body'>): StepReada
 
 export interface StyleIssue {
   sectionKey: string;
-  rule: 'step_words' | 'sentence_words' | 'block_words' | 'card_words';
+  rule: 'step_words' | 'sentence_words' | 'block_words' | 'card_words' | 'title' | 'internal_data';
   message: string;
+}
+
+/** The title a student sees for a step (callouts carry theirs in the body). */
+function titleOf(section: Section): string | undefined {
+  if (section.title) return section.title;
+  if (section.kind === 'CALLOUT') return section.body.title;
+  return undefined;
+}
+
+/** Where a step title breaks the title rule: too long, a question, or emoji. */
+export function titleIssues(section: Section): StyleIssue[] {
+  const title = titleOf(section) ?? '';
+  const issues: StyleIssue[] = [];
+  const words = title ? wordCount(title) : 0;
+  if (words > TITLE_MAX_WORDS) {
+    issues.push({
+      sectionKey: section.key,
+      rule: 'title',
+      message: `Title has ${words} words; keep step titles to 2–6 words`,
+    });
+  }
+  if (title.includes('?')) {
+    issues.push({
+      sectionKey: section.key,
+      rule: 'title',
+      message: 'Title is a question; name the concept or the action instead',
+    });
+  }
+  if (/\p{Extended_Pictographic}/u.test(title)) {
+    issues.push({ sectionKey: section.key, rule: 'title', message: 'No emoji in step titles' });
+  }
+  // Slide headlines follow the same rule: name the idea, don't ask it. (Quote the question in
+  // the body instead.)
+  if (section.kind === 'SLIDES') {
+    section.body.slides.forEach((s, i) => {
+      if (s.title.includes('?')) {
+        issues.push({
+          sectionKey: section.key,
+          rule: 'title',
+          message: `Slide ${i + 1} title is a question; name the idea and quote the question in the body`,
+        });
+      }
+    });
+  }
+  return issues;
 }
 
 const clip = (s: string, n = 60) => {
@@ -175,16 +248,85 @@ const clip = (s: string, n = 60) => {
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 };
 
-/** Where a step goes over the style's word budgets. Advice for writers and reviewers, never blocking. */
+/**
+ * Interview evidence decides what a lesson teaches; students never see it quoted. These catch the
+ * usual ways it leaks into lesson text: naming the data or NxtWave, company counts ("30 of 72
+ * companies", "asked at 6 companies") and shares of companies ("78% of 8+ LPA companies").
+ */
+const INTERNAL_DATA: readonly RegExp[] = [
+  /\b(?:interview|hiring|placement|recruit(?:er|ment)s?)['’]? (?:data|evidence|intelligence|records)\b/i,
+  /\bour (?:interview |hiring )?data\b/i,
+  /\bNxt ?Wave\b/i,
+  /\b\d+\s+(?:of|out of)\s+(?:the\s+)?\d+\b[^.\n]{0,30}\bcompan/i,
+  /\b\d+(?:\.\d+)?\s*%\s+of\s+[^.\n]{0,30}\bcompan/i,
+  /\b(?:asked|came up|seen|appeared|showed up)\b[^.\n]{0,25}\b(?:at|in|by)\s+\d+\b[^.\n]{0,20}\bcompan/i,
+];
+
+const stringsOf = (v: unknown): string[] =>
+  typeof v === 'string'
+    ? [v]
+    : Array.isArray(v)
+      ? v.flatMap(stringsOf)
+      : v && typeof v === 'object'
+        ? Object.values(v).flatMap(stringsOf)
+        : [];
+
+/**
+ * Where a step quotes internal interview data. Every string counts (tags, chat lines, code
+ * comments), not just prose. Blocking: a lesson that quotes it can't be published.
+ */
+export function internalDataIssues(section: Section): StyleIssue[] {
+  for (const text of [section.title ?? '', ...stringsOf(section.body)]) {
+    for (const re of INTERNAL_DATA) {
+      const m = text.match(re);
+      if (m) {
+        return [
+          {
+            sectionKey: section.key,
+            rule: 'internal_data',
+            message: `Quotes internal interview data ("${clip(m[0])}"). Use it to choose what to teach, never in the text: say "a common interview question" instead`,
+          },
+        ];
+      }
+    }
+  }
+  return [];
+}
+
+/**
+ * Where a step breaks the title rule, quotes internal data or goes over the style's word budgets.
+ * The budgets are advice for writers and reviewers; internal data also blocks publishing.
+ */
 export function styleIssues(section: Section, style: StyleKey): StyleIssue[] {
   const b = STYLES[style].budgets;
-  const issues: StyleIssue[] = [];
+  const issues: StyleIssue[] = [...titleIssues(section), ...internalDataIssues(section)];
   const r = readabilityOf(section);
   // Interactive and code steps carry their words in code and controls; checks and playbooks run long by nature.
+  // A slide deck is read one slide at a time, so its budget grows with the number of slides. Flip
+  // and swipe cards are read one card at a time too (e.g. interview questions with model answers),
+  // and so is a guided lab: one story step at a time beside its live picture.
+  const oneAtATime =
+    section.kind === 'SLIDES'
+      ? section.body.slides.length
+      : section.kind === 'CARD_DECK' &&
+          (section.body.layout === 'flip' || section.body.layout === 'swipe')
+        ? section.body.cards.length
+        : section.kind === 'WIDGET' && 'story' in section.body
+          ? section.body.story.length
+          : 0;
+  // A card's model answer is meant to be said out loud: the direct answer, the formula, why it is
+  // that way, a number and the caveat, so that the panel's follow-up is already answered. That is
+  // about a minute of speech, far more than one slide's bullet, so a deck gets a larger share.
+  const perItem = section.kind === 'CARD_DECK' ? b.stepWords / 1.5 : b.stepWords / 4;
   const stepBudget =
-    section.kind === 'INTERVIEW_PLAYBOOK' || section.kind === 'KNOWLEDGE_CHECK'
-      ? b.stepWords * 1.6
-      : b.stepWords;
+    oneAtATime > 0
+      ? Math.max(b.stepWords, oneAtATime * Math.round(perItem))
+      : section.kind === 'KNOWLEDGE_CHECK' && section.body.draw
+        ? // A quiz pool: one attempt reads only its own draw of questions.
+          b.stepWords * 1.6 * Math.ceil(section.body.items.length / section.body.draw)
+        : section.kind === 'INTERVIEW_PLAYBOOK' || section.kind === 'KNOWLEDGE_CHECK'
+          ? b.stepWords * 1.6
+          : b.stepWords;
   if (r.words > stepBudget) {
     issues.push({
       sectionKey: section.key,

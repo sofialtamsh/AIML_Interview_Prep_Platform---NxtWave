@@ -20,6 +20,22 @@ import { AppError } from '../../lib/errors.ts';
 
 type Tx = Prisma.TransactionClient | Db;
 
+/** Where a course sits among the active courses, in catalog order (0-based). */
+export function topicPosition(
+  db: Pick<Db, 'topic'>,
+  topic: { sortOrder: number; slug: string },
+): Promise<number> {
+  return db.topic.count({
+    where: {
+      status: 'ACTIVE',
+      OR: [
+        { sortOrder: { lt: topic.sortOrder } },
+        { sortOrder: topic.sortOrder, slug: { lt: topic.slug } },
+      ],
+    },
+  });
+}
+
 export const sectionHash = (s: Section) =>
   createHash('sha256')
     .update(canonicalJson(canonicalSection(s)))

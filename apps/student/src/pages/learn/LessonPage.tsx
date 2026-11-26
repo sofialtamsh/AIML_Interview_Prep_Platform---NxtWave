@@ -1,6 +1,7 @@
 import { Alert, ApiError, buttonClass, errorMessage, FullPageSpinner } from '@app/ui';
 import { ArrowLeft, Hourglass } from 'lucide-react';
 import { Link, useParams } from 'react-router';
+import { useTrackVisits } from '../../lib/activity';
 import { useLesson } from '../../lib/queries';
 import { LessonPlayer } from './LessonPlayer';
 
@@ -8,6 +9,7 @@ import { LessonPlayer } from './LessonPlayer';
 export function LessonPage() {
   const { topicSlug = '', subtopicSlug = '' } = useParams();
   const lesson = useLesson(topicSlug, subtopicSlug);
+  useTrackVisits();
 
   if (lesson.isPending) return <FullPageSpinner />;
   if (lesson.isError) {
@@ -24,8 +26,8 @@ export function LessonPage() {
           <>
             <h1 className="text-2xl">This lesson is on its way</h1>
             <p className="text-ink-2">
-              It is being written and reviewed for your level. Everything else on your roadmap is
-              ready to go.
+              We build these one at a time, in depth, so every step is worked out for you. Start
+              with the lessons your roadmap already marks as ready.
             </p>
           </>
         ) : (

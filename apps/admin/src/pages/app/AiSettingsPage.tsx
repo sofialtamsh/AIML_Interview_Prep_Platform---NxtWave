@@ -38,7 +38,7 @@ export function AiSettingsPage() {
   const canEdit = me?.role === 'SUPER_ADMIN';
 
   return (
-    <div className="grid gap-5 animate-rise">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 animate-rise">
       <PageHeader
         eyebrow="Content"
         title="AI"

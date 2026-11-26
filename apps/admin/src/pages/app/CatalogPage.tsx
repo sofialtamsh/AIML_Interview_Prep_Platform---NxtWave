@@ -56,7 +56,7 @@ export function CatalogPage() {
   });
 
   return (
-    <div className="grid gap-5 animate-rise">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 animate-rise">
       <PageHeader
         eyebrow="Configuration"
         title="Catalog"
@@ -816,7 +816,7 @@ function CompaniesTab({ companies }: { companies: AdminCatalogResponse['companie
               type="button"
               aria-label={`Remove ${c.name}`}
               onClick={() => window.confirm(`Remove ${c.name}?`) && del.mutate(c.id)}
-              className="grid size-6 place-items-center rounded-md text-muted hover:bg-surface-3 hover:text-ink"
+              className="grid size-10 place-items-center rounded-md text-muted hover:bg-surface-3 hover:text-ink sm:size-6"
             >
               <X className="size-3.5" />
             </button>

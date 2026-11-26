@@ -16,17 +16,27 @@ import { registerOriginGuard } from './http/origin-guard.ts';
 import { createServices } from './http/services.ts';
 import { adminAccessRoutes } from './modules/access/admin-access.routes.ts';
 import { adminAiRoutes } from './modules/ai/admin-ai.routes.ts';
+import {
+  adminAnalyticsRoutes,
+  studentActivityRoutes,
+} from './modules/analytics/analytics.routes.ts';
 import { adminAuthRoutes } from './modules/auth/admin-auth.routes.ts';
 import { googleAuthRoutes } from './modules/auth/google.routes.ts';
 import { studentAuthRoutes } from './modules/auth/student-auth.routes.ts';
 import { adminCatalogRoutes } from './modules/catalog/admin-catalog.routes.ts';
 import { adminContentRoutes } from './modules/content/admin-content.routes.ts';
 import { studentLessonRoutes } from './modules/content/student-lesson.routes.ts';
+import { adminCoverageRoutes } from './modules/coverage/admin-coverage.routes.ts';
 import { adminCurriculumRoutes } from './modules/curriculum/admin-curriculum.routes.ts';
+import { adminFeedbackRoutes } from './modules/feedback/admin-feedback.routes.ts';
 import { studentGoalsRoutes } from './modules/goals/student-goals.routes.ts';
 import { healthRoutes } from './modules/health/health.routes.ts';
+import { adminHiringRoutes } from './modules/hiring/admin-hiring.routes.ts';
+import { adminPracticeRoutes } from './modules/practice/admin-practice.routes.ts';
+import { studentPracticeRoutes } from './modules/practice/student-practice.routes.ts';
 import { studentRoadmapRoutes } from './modules/roadmap/student-roadmap.routes.ts';
 import { adminStudentsRoutes } from './modules/students/admin-students.routes.ts';
+import { adminStudyPlanRoutes } from './modules/study-plan/admin-study-plan.routes.ts';
 import { adminRoutes } from './modules/users/admin.routes.ts';
 import { studentRoutes } from './modules/users/student.routes.ts';
 
@@ -101,6 +111,8 @@ export async function buildApp(ctx: AppContext) {
   await app.register(studentGoalsRoutes, { prefix: '/api/v1/student' });
   await app.register(studentRoadmapRoutes, { prefix: '/api/v1/student' });
   await app.register(studentLessonRoutes, { prefix: '/api/v1/student' });
+  await app.register(studentPracticeRoutes, { prefix: '/api/v1/student/practice' });
+  await app.register(studentActivityRoutes, { prefix: '/api/v1/student' });
   await app.register(adminAuthRoutes, { prefix: '/api/v1/admin/auth' });
   await app.register(googleAuthRoutes('ADMIN'), { prefix: '/api/v1/admin/auth' });
   await app.register(adminRoutes, { prefix: '/api/v1/admin' });
@@ -110,6 +122,12 @@ export async function buildApp(ctx: AppContext) {
   await app.register(adminCurriculumRoutes, { prefix: '/api/v1/admin/curriculum' });
   await app.register(adminContentRoutes, { prefix: '/api/v1/admin/content' });
   await app.register(adminAiRoutes, { prefix: '/api/v1/admin/ai' });
+  await app.register(adminStudyPlanRoutes, { prefix: '/api/v1/admin/study-plan' });
+  await app.register(adminPracticeRoutes, { prefix: '/api/v1/admin/practice' });
+  await app.register(adminFeedbackRoutes, { prefix: '/api/v1/admin/feedback' });
+  await app.register(adminHiringRoutes, { prefix: '/api/v1/admin/hiring' });
+  await app.register(adminCoverageRoutes, { prefix: '/api/v1/admin/coverage' });
+  await app.register(adminAnalyticsRoutes, { prefix: '/api/v1/admin/analytics' });
 
   return app;
 }

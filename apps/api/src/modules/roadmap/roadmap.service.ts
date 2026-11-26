@@ -20,6 +20,8 @@ import { daysBetween, fromDbDate, toDbDate, todayIn } from '../../lib/dates.ts';
 import { isUniqueViolation } from '../../lib/db-errors.ts';
 import { AppError, notFound } from '../../lib/errors.ts';
 import { lessonSummaries } from '../content/lesson-view.ts';
+import { practiceForStudent } from '../practice/practice.service.ts';
+import { loadStudyPlan, resolveGoalChoices } from '../study-plan/study-plan.store.ts';
 import { planToIcs } from './calendar.ts';
 import {
   allocateDays,
@@ -198,22 +200,79 @@ export class RoadmapService {
   async onboardingPreview(
     studentId: string,
     timezone: string,
-    body: { roleId: string; bracketId: string; skills: SkillRatings; schedule: Schedule },
+    body: { roleId: string; bracketId?: string; skills: SkillRatings; schedule?: Schedule },
   ): Promise<OnboardingPlanPreviewResponse> {
-    const curriculumId = await this.publishedCurriculumId(body.roleId, body.bracketId);
+    const today = todayIn(timezone, this.ctx.now());
+    // The package and time the goal will get: the student's picks, or the team's study plan.
+    const { plan } = await loadStudyPlan(this.db);
+    const choice = await resolveGoalChoices(this.db, plan, body, today).catch(() => null);
+    if (!choice) return { preview: null };
+    const curriculumId = await this.publishedCurriculumId(body.roleId, choice.bracketId);
     if (!curriculumId) return { preview: null };
     const curriculum = await this.loadCurriculum(curriculumId);
     const input = await this.planInput(
       curriculum,
       {
-        ...body.schedule,
-        studyWeekdays: [...body.schedule.studyWeekdays].sort((a, b) => a - b),
+        ...choice.schedule,
+        studyWeekdays: [...choice.schedule.studyWeekdays].sort((a, b) => a - b),
         skills: body.skills,
       },
-      todayIn(timezone, this.ctx.now()),
+      today,
       studentId,
     );
     return { preview: previewOf(curriculum, input, null) };
+  }
+
+  /**
+   * Admin estimate for a role × package: how long the published curriculum takes on a given
+   * schedule for a student who starts today with no prior knowledge. Null without a curriculum.
+   */
+  async previewForTarget(
+    roleId: string,
+    bracketId: string,
+    schedule: Schedule,
+    startDate: string,
+  ): Promise<PlanPreview | null> {
+    const curriculumId = await this.publishedCurriculumId(roleId, bracketId);
+    if (!curriculumId) return null;
+    const curriculum = await this.loadCurriculum(curriculumId);
+    const input = await this.planInput(
+      curriculum,
+      {
+        ...schedule,
+        studyWeekdays: [...schedule.studyWeekdays].sort((a, b) => a - b),
+        skills: {},
+      },
+      startDate,
+      null,
+    );
+    return previewOf(curriculum, input, null);
+  }
+
+  /**
+   * The plan, item by item, that a new student on this role × package would get if they started
+   * today (Admin → Content coverage). Null without a published curriculum.
+   */
+  async targetPlan(
+    roleId: string,
+    bracketId: string,
+    schedule: Schedule,
+    startDate: string,
+  ): Promise<{ curriculumId: string; version: number; plan: Plan } | null> {
+    const curriculumId = await this.publishedCurriculumId(roleId, bracketId);
+    if (!curriculumId) return null;
+    const curriculum = await this.loadCurriculum(curriculumId);
+    const input = await this.planInput(
+      curriculum,
+      {
+        ...schedule,
+        studyWeekdays: [...schedule.studyWeekdays].sort((a, b) => a - b),
+        skills: {},
+      },
+      startDate,
+      null,
+    );
+    return { curriculumId, version: curriculum.version, plan: buildPlan(input) };
   }
 
   /** The active plan as an iCalendar file: one all-day event per study day. */
@@ -226,8 +285,11 @@ export class RoadmapService {
       select: { id: true, title: true },
     });
     const title = new Map(subtopics.map((x) => [x.id, x.title]));
+    const { plan } = await loadStudyPlan(this.db);
     return planToIcs({
-      calendarName: `NxtWave Prep · ${goal.role.title} ${goal.bracket.label}`,
+      calendarName: plan.studentsChoosePackage
+        ? `NxtWave Prep · ${goal.role.title} ${goal.bracket.label}`
+        : `NxtWave Prep · ${goal.role.title}`,
       uidPrefix: active.id,
       roadmapUrl: `${this.ctx.env.STUDENT_APP_URL}/roadmap`,
       now: this.ctx.now(),
@@ -292,7 +354,7 @@ export class RoadmapService {
         )
       : new Map();
 
-    const [topic, concepts, interest, goal] = await Promise.all([
+    const [topic, concepts, interest, goal, { plan }] = await Promise.all([
       this.db.topic.findUniqueOrThrow({ where: { id: topicDto.id } }),
       this.db.concept.findMany({
         where: { subtopicId: { in: topicDto.items.map((i) => i.subtopicId) } },
@@ -302,12 +364,22 @@ export class RoadmapService {
         where: { studentId_kind_targetId: { studentId, kind: 'TOPIC', targetId: topicDto.id } },
       }),
       this.activeGoal(studentId),
+      loadStudyPlan(this.db),
     ]);
+    // Practice questions tagged with this topic (or one of its subtopics), for the student's role.
+    const { items: practiceItems } = await practiceForStudent(this.db, studentId, {
+      topicId: topicDto.id,
+    });
 
-    // The deepest level in this topic, explained in the student's own target terms.
+    // The deepest level in this topic, explained in the student's own target terms. The
+    // package stays out of it while students don't choose one.
     const deepest = Math.max(...topicDto.items.map((i) => i.depth.rank));
     const level = await this.db.depthLevel.findUnique({ where: { rank: deepest } });
-    const target = goal ? `${goal.bracket.label} ${goal.role.title}` : 'your target';
+    const target = goal
+      ? plan.studentsChoosePackage
+        ? `${goal.bracket.label} ${goal.role.title}`
+        : goal.role.title
+      : 'your target';
     const depthNote = level
       ? `For ${target} interviews you go up to ${level.name} here. ${level.description}`
       : '';
@@ -333,8 +405,13 @@ export class RoadmapService {
         lessons: lessons.size,
         completed: [...lessons.values()].filter((l) => l.status === 'COMPLETED').length,
       },
-      // The question bank arrives in Phase 5. The entry point is shown now.
-      practice: { available: false, questions: 0, notifyMe: interest !== null },
+      // Solving happens on the NxtWave learning portal; the Practice tab lists every question.
+      practice: {
+        available: practiceItems.length > 0,
+        questions: practiceItems.length,
+        notifyMe: interest !== null,
+        items: practiceItems,
+      },
     };
   }
 
@@ -724,7 +801,7 @@ export class RoadmapService {
     const [subtopics, curriculumItems, depths] = await Promise.all([
       this.db.subtopic.findMany({
         where: { id: { in: version.items.map((i) => i.subtopicId) } },
-        include: { topic: true },
+        include: { topic: true, concepts: { orderBy: { sortOrder: 'asc' } } },
       }),
       this.db.roleCurriculumItem.findMany({
         where: { roleCurriculumId: version.roleCurriculumId },
@@ -768,6 +845,7 @@ export class RoadmapService {
           plannedEnd: i.plannedEnd ? fromDbDate(i.plannedEnd) : null,
           status: statuses.get(i.subtopicId) ?? 'UPCOMING',
           objectives: objectives.get(i.subtopicId) ?? [],
+          concepts: s.concepts.map((c) => c.name),
         },
       ];
     });
@@ -825,9 +903,10 @@ export class RoadmapService {
     c: LoadedCurriculum,
     s: PlanSettings,
     startDate: string,
-    studentId: string,
+    /** Null for an admin estimate: a new student with nothing finished yet. */
+    studentId: string | null,
   ): Promise<PlanInput> {
-    const { done } = await this.progressOf(studentId);
+    const done = studentId ? (await this.progressOf(studentId)).done : new Set<string>();
     return {
       items: c.items.map((i) => ({
         ...i,

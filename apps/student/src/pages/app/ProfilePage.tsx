@@ -24,7 +24,7 @@ const TIMEZONES = [
 
 export function ProfilePage() {
   return (
-    <div className="grid max-w-2xl gap-6 animate-rise">
+    <div className="grid max-w-2xl grid-cols-[minmax(0,1fr)] gap-6 animate-rise">
       <div>
         <h1 className="text-[clamp(24px,2.6vw,30px)]">Profile & security</h1>
         <p className="mt-1.5 text-muted">Keep your details up to date.</p>

@@ -144,9 +144,9 @@ describe('AI lesson generation', () => {
     const usage = await testDb().aiUsageRecord.findMany();
     expect(new Set(usage.map((u) => `${u.task}:${u.promptKey}@${u.promptVersion}`))).toEqual(
       new Set([
-        'LESSON_PLAN:lesson.plan@1',
-        'LESSON_DRAFT:lesson.draft@1',
-        'LESSON_EVALUATION:lesson.evaluate@1',
+        'LESSON_PLAN:lesson.plan@10',
+        'LESSON_DRAFT:lesson.draft@10',
+        'LESSON_EVALUATION:lesson.evaluate@4',
       ]),
     );
     // Nothing reaches students until a person publishes it.

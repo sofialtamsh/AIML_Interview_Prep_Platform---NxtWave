@@ -26,7 +26,9 @@ import {
   SECTION_KINDS,
   type Section,
   type SectionKind,
+  SlidesBody,
   SummaryBody,
+  VisualBody,
   WidgetBody,
 } from './schema';
 
@@ -132,6 +134,8 @@ export const GenSection = z.discriminatedUnion('kind', [
   z.object({ ...genEnvelope, kind: z.literal('EXPLANATION'), body: ExplanationBody }),
   z.object({ ...genEnvelope, kind: z.literal('CARD_DECK'), body: CardDeckBody }),
   z.object({ ...genEnvelope, kind: z.literal('DIAGRAM'), body: DiagramBody }),
+  z.object({ ...genEnvelope, kind: z.literal('VISUAL'), body: VisualBody }),
+  z.object({ ...genEnvelope, kind: z.literal('SLIDES'), body: SlidesBody }),
   z.object({ ...genEnvelope, kind: z.literal('CODE_EXAMPLE'), body: GenCodeExampleBody }),
   z.object({ ...genEnvelope, kind: z.literal('CODE_EXPLORER'), body: GenCodeExplorerBody }),
   z.object({ ...genEnvelope, kind: z.literal('WIDGET'), body: WidgetBody }),
@@ -358,6 +362,8 @@ export function checkPlan(
     'PLAYGROUND',
     'CODE_EXAMPLE',
     'CARD_DECK',
+    'VISUAL',
+    'SLIDES',
   ]);
   for (const depth of opts.depths) {
     const seen = resolveSections(

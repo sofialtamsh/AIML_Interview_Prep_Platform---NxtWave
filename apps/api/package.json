@@ -19,6 +19,7 @@
     "db:studio": "prisma studio",
     "admin:create": "tsx src/cli/create-admin.ts",
     "db:bootstrap": "tsx src/cli/bootstrap-catalog.ts",
+    "lessons:sync": "tsx src/cli/sync-lessons.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

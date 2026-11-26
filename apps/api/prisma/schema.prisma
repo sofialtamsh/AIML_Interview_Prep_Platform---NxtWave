@@ -64,6 +64,8 @@ model User {
   lessonProgress ModuleProgress[]
   checkAttempts  KnowledgeCheckAttempt[]
   feedback       Feedback[]
+  practiceOpens  PracticeOpen[]
+  activity       StudentActivity[]
 
   @@index([role, status])
   @@map("app_user")
@@ -221,9 +223,10 @@ model CareerRole {
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   updatedById    String?      @map("updated_by_id") @db.Uuid
 
-  skillAreas RoleSkillArea[]
-  goals      StudentGoal[]
-  curricula  RoleCurriculum[]
+  skillAreas        RoleSkillArea[]
+  goals             StudentGoal[]
+  curricula         RoleCurriculum[]
+  practiceQuestions PracticeQuestionRole[]
 
   @@index([availability, sortOrder])
   @@map("career_role")
@@ -494,11 +497,12 @@ model Topic {
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  skillArea     SkillArea?          @relation(fields: [skillAreaId], references: [id], onDelete: SetNull)
-  subtopics     Subtopic[]
-  prerequisites TopicPrerequisite[] @relation("TopicNeeds")
-  requiredBy    TopicPrerequisite[] @relation("TopicNeededBy")
-  roadmapItems  RoadmapItem[]
+  skillArea         SkillArea?              @relation(fields: [skillAreaId], references: [id], onDelete: SetNull)
+  subtopics         Subtopic[]
+  prerequisites     TopicPrerequisite[]     @relation("TopicNeeds")
+  requiredBy        TopicPrerequisite[]     @relation("TopicNeededBy")
+  roadmapItems      RoadmapItem[]
+  practiceQuestions PracticeQuestionTopic[]
 
   @@index([status, sortOrder])
   @@map("topic")
@@ -530,14 +534,15 @@ model Subtopic {
   createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  topic           Topic                  @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  concepts        Concept[]
-  prerequisites   SubtopicPrerequisite[] @relation("SubtopicNeeds")
-  requiredBy      SubtopicPrerequisite[] @relation("SubtopicNeededBy")
-  curriculumItems RoleCurriculumItem[]
-  roadmapItems    RoadmapItem[]
-  lesson          LearningModule?
-  lessonProgress  ModuleProgress[]
+  topic             Topic                      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  concepts          Concept[]
+  prerequisites     SubtopicPrerequisite[]     @relation("SubtopicNeeds")
+  requiredBy        SubtopicPrerequisite[]     @relation("SubtopicNeededBy")
+  curriculumItems   RoleCurriculumItem[]
+  roadmapItems      RoadmapItem[]
+  lesson            LearningModule?
+  lessonProgress    ModuleProgress[]
+  practiceQuestions PracticeQuestionSubtopic[]
 
   @@unique([topicId, slug])
   @@index([topicId, sortOrder])
@@ -732,6 +737,8 @@ enum SectionKind {
   EXPLANATION
   CARD_DECK
   DIAGRAM
+  VISUAL
+  SLIDES
   CODE_EXAMPLE
   CODE_EXPLORER
   WIDGET
@@ -938,6 +945,7 @@ enum FeedbackTarget {
   SECTION
   LESSON
   PAGE
+  PRACTICE_QUESTION
 }
 
 enum Thumbs {
@@ -948,27 +956,31 @@ enum Thumbs {
 /// Thumbs on a step, the end-of-lesson rating, or the floating feedback button. Always tied to
 /// the exact revision shown, so a fix can target it.
 model Feedback {
-  id                String         @id @default(uuid(7)) @db.Uuid
-  studentId         String         @map("student_id") @db.Uuid
-  targetType        FeedbackTarget @map("target_type")
-  moduleVersionId   String?        @map("module_version_id") @db.Uuid
-  sectionKey        String?        @map("section_key")
-  sectionRevisionId String?        @map("section_revision_id") @db.Uuid
+  id                 String         @id @default(uuid(7)) @db.Uuid
+  studentId          String         @map("student_id") @db.Uuid
+  targetType         FeedbackTarget @map("target_type")
+  moduleVersionId    String?        @map("module_version_id") @db.Uuid
+  sectionKey         String?        @map("section_key")
+  sectionRevisionId  String?        @map("section_revision_id") @db.Uuid
   /// App path for PAGE feedback, e.g. "/roadmap".
-  page              String?
-  thumbs            Thumbs?
+  page               String?
+  /// For PRACTICE_QUESTION feedback: the question rated (one rating per student).
+  practiceQuestionId String?        @map("practice_question_id") @db.Uuid
+  thumbs             Thumbs?
   /// 1–5 faces.
-  rating            Int?
-  tags              String[]
-  text              String?
-  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  rating             Int?
+  tags               String[]
+  text               String?
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  student         User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  moduleVersion   ModuleVersion?   @relation(fields: [moduleVersionId], references: [id], onDelete: Cascade)
-  sectionRevision SectionRevision? @relation(fields: [sectionRevisionId], references: [id], onDelete: Cascade)
+  student          User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  moduleVersion    ModuleVersion?    @relation(fields: [moduleVersionId], references: [id], onDelete: Cascade)
+  sectionRevision  SectionRevision?  @relation(fields: [sectionRevisionId], references: [id], onDelete: Cascade)
+  practiceQuestion PracticeQuestion? @relation(fields: [practiceQuestionId], references: [id], onDelete: Cascade)
 
   @@index([targetType, createdAt])
+  @@index([practiceQuestionId])
   @@index([sectionRevisionId])
   @@index([moduleVersionId])
   @@map("feedback")
@@ -1128,4 +1140,238 @@ model ContentEvaluation {
 
   @@index([moduleVersionId, createdAt])
   @@map("content_evaluation")
+}
+
+// ───────────────────────────── Practice links [Pilot v2] ─────────────────────────────
+// Questions students solve on the NxtWave learning portal (CCBP). The platform lists them in
+// the Practice tab and links out. The in-app question bank (Phase 5) builds on top of this.
+
+model PracticeQuestion {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  title            String
+  /// The group it is listed under, e.g. "Machine Learning".
+  category         String
+  /// Optional finer label, e.g. "Linear regression".
+  skill            String?
+  /// One or two lines shown under the name: what the question asks.
+  description      String?
+  /// Companies known to ask it (free text, shown as "Asked at").
+  askedAt          String[]           @default([]) @map("asked_at")
+  difficulty       QuestionDifficulty
+  /// The question on the learning portal. One entry per link.
+  solveUrl         String             @unique @map("solve_url")
+  estimatedMinutes Int?               @map("estimated_minutes")
+  /// Only published questions reach students.
+  published        Boolean            @default(false)
+  sortOrder        Int                @default(0) @map("sort_order")
+  createdById      String?            @map("created_by_id") @db.Uuid
+  updatedById      String?            @map("updated_by_id") @db.Uuid
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  /// Roles that see it. None: every role.
+  roles     PracticeQuestionRole[]
+  /// Interview topics and subtopics it practises: it is listed on those topic pages.
+  topics    PracticeQuestionTopic[]
+  subtopics PracticeQuestionSubtopic[]
+  opens     PracticeOpen[]
+  feedback  Feedback[]
+
+  @@index([published, sortOrder])
+  @@index([category, sortOrder])
+  @@map("practice_question")
+}
+
+model PracticeQuestionRole {
+  questionId String @map("question_id") @db.Uuid
+  roleId     String @map("role_id") @db.Uuid
+
+  question PracticeQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  role     CareerRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, roleId])
+  @@index([roleId])
+  @@map("practice_question_role")
+}
+
+model PracticeQuestionTopic {
+  questionId String @map("question_id") @db.Uuid
+  topicId    String @map("topic_id") @db.Uuid
+
+  question PracticeQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  topic    Topic            @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, topicId])
+  @@index([topicId])
+  @@map("practice_question_topic")
+}
+
+model PracticeQuestionSubtopic {
+  questionId String @map("question_id") @db.Uuid
+  subtopicId String @map("subtopic_id") @db.Uuid
+
+  question PracticeQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  subtopic Subtopic         @relation(fields: [subtopicId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, subtopicId])
+  @@index([subtopicId])
+  @@map("practice_question_subtopic")
+}
+
+/// A student opened a question from the Practice tab (the "Solve" click). Solving itself
+/// happens on the portal; syncing solved status from there is a later step.
+model PracticeOpen {
+  studentId     String   @map("student_id") @db.Uuid
+  questionId    String   @map("question_id") @db.Uuid
+  openCount     Int      @default(1) @map("open_count")
+  firstOpenedAt DateTime @default(now()) @map("first_opened_at") @db.Timestamptz(3)
+  lastOpenedAt  DateTime @default(now()) @map("last_opened_at") @db.Timestamptz(3)
+
+  student  User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  question PracticeQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, questionId])
+  @@index([questionId])
+  @@index([lastOpenedAt])
+  @@map("practice_open")
+}
+
+// ───────────────────────────── Hiring intelligence (super admins only) ─────────────────────────────
+// The interview-question export from the Hiring Intelligence dashboard, kept for curriculum and
+// content work. Only super admins can read it. One snapshot at a time: a new import replaces it.
+
+/// Job titles in the ML Engineer family (docs/11-mle-interview-evidence.md).
+enum HiringFamily {
+  /// ML, AI/ML, data-science and computer-vision titles.
+  ML_TITLE
+  /// Generic AI-engineer titles.
+  AI_TITLE
+}
+
+/// CTC band of the opening, from its maximum (or minimum) CTC.
+enum HiringCtcBand {
+  UNDER_8_LPA
+  FROM_8_LPA
+}
+
+model HiringSnapshot {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  /// The dashboard's own label for the data set.
+  source           String
+  /// sha-256 of the export, so the same file is not imported twice.
+  checksum         String   @unique
+  dataFrom         DateTime @map("data_from") @db.Date
+  dataTo           DateTime @map("data_to") @db.Date
+  companyCount     Int      @map("company_count")
+  opportunityCount Int      @map("opportunity_count")
+  openingCount     Int      @map("opening_count")
+  questionCount    Int      @map("question_count")
+  importedById     String?  @map("imported_by_id") @db.Uuid
+  importedAt       DateTime @default(now()) @map("imported_at") @db.Timestamptz(3)
+
+  opportunities HiringOpportunity[]
+  questions     HiringQuestion[]
+
+  @@map("hiring_snapshot")
+}
+
+/// One job opportunity (a company hiring for one or more titles).
+model HiringOpportunity {
+  id             String         @id @default(uuid(7)) @db.Uuid
+  snapshotId     String         @map("snapshot_id") @db.Uuid
+  /// Position in the export, used to link questions.
+  position       Int
+  externalKey    String         @map("external_key")
+  company        String
+  roles          String[]
+  domains        String[]
+  skills         String[]
+  ctcMinLpa      Float?         @map("ctc_min_lpa")
+  ctcMaxLpa      Float?         @map("ctc_max_lpa")
+  ctcBand        HiringCtcBand? @map("ctc_band")
+  openings       Int?
+  firstInterview DateTime       @map("first_interview") @db.Date
+  lastInterview  DateTime       @map("last_interview") @db.Date
+  questionCount  Int            @map("question_count")
+  family         HiringFamily?
+
+  snapshot  HiringSnapshot   @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  questions HiringQuestion[]
+
+  @@unique([snapshotId, position])
+  @@index([snapshotId, company])
+  @@index([snapshotId, family])
+  @@map("hiring_opportunity")
+}
+
+/// One interview question as reported, with the prep theme it was sorted into.
+model HiringQuestion {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  snapshotId    String         @map("snapshot_id") @db.Uuid
+  opportunityId String         @map("opportunity_id") @db.Uuid
+  company       String
+  role          String
+  domain        String
+  skills        String[]
+  topic         String
+  subtopic      String?
+  questionType  String         @map("question_type")
+  codingType    String         @map("coding_type")
+  round         String
+  difficulty    String?
+  askedOn       DateTime       @map("asked_on") @db.Date
+  text          String
+  family        HiringFamily?
+  ctcBand       HiringCtcBand? @map("ctc_band")
+  /// The interview-prep theme from the published keyword rules, e.g. "Self-introduction and background".
+  theme         String?
+  /// The curriculum topic slug that theme belongs to, e.g. "self-introduction-hr".
+  prepTopicSlug String?        @map("prep_topic_slug")
+
+  snapshot    HiringSnapshot    @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  opportunity HiringOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([snapshotId, family, prepTopicSlug])
+  @@index([snapshotId, company])
+  @@index([snapshotId, askedOn])
+  @@index([opportunityId])
+  @@map("hiring_question")
+}
+
+// ───────────────────────────── Student activity [V1 analytics] ─────────────────────────────
+// What students did and when, for the team's analytics (who was active on which day, for how
+// long, doing what). Nothing a student sees depends on these rows.
+
+enum ActivityKind {
+  /// A page opened in the student app.
+  VISIT
+  /// A lesson step saved; `value` is the seconds of study time since the save before it.
+  LESSON_STEP
+  LESSON_COMPLETED
+  /// A quiz or check answer graded; `value` is 1 when right and 0 when wrong.
+  QUIZ_ANSWER
+  /// "Solve Question" opened from the Practice tab.
+  PRACTICE_SOLVE
+  /// "Watch concept" opened from the Practice tab.
+  PRACTICE_CONCEPT
+}
+
+model StudentActivity {
+  id        String       @id @default(uuid(7)) @db.Uuid
+  studentId String       @map("student_id") @db.Uuid
+  kind      ActivityKind
+  /// The calendar day in India (Asia/Kolkata) it happened on, so "active on 25 Nov" means the
+  /// student's own day, not a UTC one.
+  day       DateTime     @db.Date
+  /// What it was about: an app path for a visit, "topic/unit" for lessons, a question id for
+  /// practice.
+  target    String?
+  value     Int          @default(0)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([day, studentId])
+  @@index([studentId, createdAt])
+  @@map("student_activity")
 }

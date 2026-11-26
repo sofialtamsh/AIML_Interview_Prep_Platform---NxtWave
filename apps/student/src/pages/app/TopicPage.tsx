@@ -14,17 +14,20 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
+import { QuestionRow } from '../../features/practice/QuestionRow';
 import {
   DepthMeter,
   FastTrackBadge,
   formatMinutes,
-  formatRange,
   PriorityBadge,
   STATUS,
   StatusIcon,
+  scheduleRange,
+  shownStatus,
   TopicIcon,
 } from '../../features/roadmap/parts';
 import { api, queryClient } from '../../lib/api';
+import { LEARN_SUBJECT, SELF_PACED } from '../../lib/features';
 import { keys, useTopic } from '../../lib/queries';
 
 export function TopicPage() {
@@ -46,7 +49,7 @@ export function TopicPage() {
   const nextLesson = t.items.find((i) => i.lesson && i.lesson.status !== 'COMPLETED');
 
   return (
-    <div className="grid gap-6 animate-rise">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 animate-rise">
       <BackLink />
       <header className="flex items-start gap-4">
         <span className="grid size-12 shrink-0 place-items-center rounded-xl border border-brand/20 bg-brand-soft text-brand sm:size-14">
@@ -97,13 +100,25 @@ export function TopicPage() {
           Icon={Dumbbell}
           ready={t.practice.available}
           title="Practice Questions"
-          body="Interview questions picked for your package, from warm-ups to the ones that trip people up."
+          body={
+            t.practice.available
+              ? 'Real interview questions for your role. Solve them on the NxtWave learning portal.'
+              : 'Interview questions picked for your role, from warm-ups to the ones that trip people up.'
+          }
           status={
             t.practice.available
-              ? `${t.practice.questions} questions`
+              ? `${t.practice.questions} question${t.practice.questions === 1 ? '' : 's'} for this topic`
               : 'Questions are being matched to this topic'
           }
-          action={<TopicNotify topicId={t.topic.id} slug={slug} on={t.practice.notifyMe} />}
+          action={
+            t.practice.available ? (
+              <a href="#practice" className={buttonClass('primary', 'sm')}>
+                See the questions <ArrowRight className="size-3.5" aria-hidden />
+              </a>
+            ) : (
+              <TopicNotify topicId={t.topic.id} slug={slug} on={t.practice.notifyMe} />
+            )
+          }
         />
       </div>
 
@@ -111,10 +126,46 @@ export function TopicPage() {
         <h2 className="text-base">What you will cover</h2>
         <ol className="grid gap-3">
           {t.items.map((i) => (
-            <SubtopicCard key={i.subtopicId} item={i} topicSlug={slug} />
+            <SubtopicCard
+              key={i.subtopicId}
+              item={i}
+              topicSlug={slug}
+              practice={
+                t.practice.items.filter((q) =>
+                  q.tags.some((tag) => tag.topicSlug === slug && tag.subtopicSlug === i.slug),
+                ).length
+              }
+            />
           ))}
         </ol>
       </section>
+
+      {t.practice.items.length > 0 && (
+        <section id="practice" className="grid scroll-mt-24 gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-base">Practice questions for this topic</h2>
+              <p className="mt-0.5 text-[13px] text-muted">
+                Tap Solve to open a question on the NxtWave learning portal, signed in with your
+                NxtWave account.
+              </p>
+            </div>
+            <Link
+              to={`/practice?topic=${encodeURIComponent(slug)}`}
+              className="text-[13px] font-semibold text-brand hover:underline"
+            >
+              Open in Practice
+            </Link>
+          </div>
+          <Card className="overflow-hidden">
+            <ul className="divide-y divide-line">
+              {t.practice.items.map((q) => (
+                <QuestionRow key={q.id} q={q} />
+              ))}
+            </ul>
+          </Card>
+        </section>
+      )}
     </div>
   );
 }
@@ -125,7 +176,8 @@ function BackLink() {
       to="/roadmap"
       className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-ink-2 hover:text-ink"
     >
-      <ArrowLeft className="size-4" aria-hidden /> Back to roadmap
+      <ArrowLeft className="size-4" aria-hidden />{' '}
+      {SELF_PACED ? `Back to ${LEARN_SUBJECT.title}` : 'Back to roadmap'}
     </Link>
   );
 }
@@ -192,27 +244,32 @@ function TopicNotify({ topicId, slug, on }: { topicId: string; slug: string; on:
   );
 }
 
-function SubtopicCard({
+/** One unit: what it covers, where the student stands in it, and the way into its lesson. */
+export function SubtopicCard({
   item,
   topicSlug,
+  practice,
 }: {
   item: TopicPageResponse['items'][number];
   topicSlug: string;
+  /** Practice questions tagged with this subtopic. */
+  practice: number;
 }) {
-  const range = formatRange(item.plannedStart, item.plannedEnd);
+  const range = scheduleRange(item.plannedStart, item.plannedEnd);
   const lesson = item.lesson;
+  const status = shownStatus(item.status, lesson?.status === 'IN_PROGRESS');
   return (
     <li>
       <Card className="p-4 sm:p-5">
         <div className="flex items-start gap-3">
-          <StatusIcon status={item.status} className="mt-0.5" />
+          <StatusIcon status={status} className="mt-0.5" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <h3 className="font-sans text-[15.5px] font-semibold tracking-normal">
                 {item.title}
               </h3>
-              {item.status !== 'UPCOMING' && (
-                <Badge tone={STATUS[item.status].tone}>{STATUS[item.status].label}</Badge>
+              {status !== 'UPCOMING' && (
+                <Badge tone={STATUS[status].tone}>{STATUS[status].label}</Badge>
               )}
               <PriorityBadge priority={item.priority} optional={item.isOptional} />
               {item.fastTrack && <FastTrackBadge />}
@@ -220,21 +277,28 @@ function SubtopicCard({
             <p className="mt-1 text-[13.5px] text-ink-2">{item.summary}</p>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-muted">
               <DepthMeter rank={item.depth.rank} name={item.depth.name} />
-              <span>{formatMinutes(item.estimatedMinutes)}</span>
+              {/* The planned time is a schedule figure. Self-paced, a unit with a lesson shows
+                  that lesson's real length beside its button instead of two different times. */}
+              {!(SELF_PACED && lesson) && <span>{formatMinutes(item.estimatedMinutes)}</span>}
               {range && <span>{range}</span>}
             </div>
 
-            {item.objectives.length > 0 && (
-              <ul className="mt-3 grid gap-1 text-[13.5px]">
-                {item.objectives.map((o) => (
-                  <li key={o} className="flex gap-2">
-                    <span className="text-brand" aria-hidden>
-                      ✓
-                    </span>
-                    {o}
-                  </li>
-                ))}
-              </ul>
+            {/* The parts this unit covers. What the student will be able to do afterwards waits
+                inside the lesson, where it belongs: the roadmap stays a map, not a syllabus. */}
+            {item.concepts.length > 0 && (
+              <>
+                <div className="eyebrow mt-3">Covered here</div>
+                <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Covered here">
+                  {item.concepts.map((c) => (
+                    <li
+                      key={c.key}
+                      className="rounded-md border border-line bg-surface-2 px-2 py-0.5 text-[12px] text-ink-2"
+                    >
+                      {c.name}
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
             <div className="mt-3.5 flex flex-wrap items-center gap-3">
               {lesson ? (
@@ -265,19 +329,16 @@ function SubtopicCard({
               ) : (
                 <span className="text-[12.5px] text-muted">Lesson coming soon</span>
               )}
+              {practice > 0 && (
+                <a
+                  href="#practice"
+                  className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand hover:underline"
+                >
+                  <Dumbbell className="size-3.5" aria-hidden /> {practice} practice question
+                  {practice === 1 ? '' : 's'}
+                </a>
+              )}
             </div>
-            {item.concepts.length > 0 && (
-              <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Concepts">
-                {item.concepts.map((c) => (
-                  <li
-                    key={c.key}
-                    className="rounded-md border border-line bg-surface-2 px-2 py-0.5 text-[12px] text-ink-2"
-                  >
-                    {c.name}
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
         </div>
       </Card>

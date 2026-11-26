@@ -47,7 +47,7 @@ export function EditTab({
   const change = new Map(v.sections.map((s) => [s.key, s.change]));
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       {!editable && (
         <Alert tone="info">
           {v.version.status === 'UNDER_REVIEW'

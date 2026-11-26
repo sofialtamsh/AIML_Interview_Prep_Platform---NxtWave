@@ -1,3 +1,4 @@
+export { ANIMATION_LIBRARY_NAMES, AnimationView } from './animations';
 export * from './chunker';
 export * from './code';
 export * from './context';

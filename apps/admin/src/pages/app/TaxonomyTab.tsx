@@ -56,7 +56,7 @@ export function TaxonomyTab({
   const area = new Map(catalog.skillAreas.map((a) => [a.id, a.name]));
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-[70ch] text-sm text-muted">
           Prerequisites decide the order students learn in. Loops are rejected, so the planner can

@@ -36,7 +36,7 @@ const POLICIES: Array<{ value: RegistrationPolicy; title: string; text: string }
 
 export function AccessPage() {
   return (
-    <div className="grid gap-5 animate-rise">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 animate-rise">
       <PageHeader
         eyebrow="People"
         title="Access"
@@ -126,7 +126,8 @@ function CohortsCard() {
         <h2 className="text-base">Cohorts</h2>
         <form
           noValidate
-          className="mt-3 grid items-end gap-3 sm:grid-cols-[1fr_160px_160px_auto]"
+          // A date input's own minimum is wider than 160px, so the date columns get 11rem.
+          className="mt-3 grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_11rem_11rem_auto]"
           onSubmit={(e) => {
             e.preventDefault();
             const form = e.currentTarget;
@@ -255,7 +256,7 @@ function AllowlistCard() {
             rows={4}
             placeholder={'priya@college.edu\n@nxtwave.co.in'}
           />
-          <div className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
+          <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
             <div className="grid gap-1.5">
               <label htmlFor="cohortId" className="text-[13px] font-semibold">
                 Add to cohort

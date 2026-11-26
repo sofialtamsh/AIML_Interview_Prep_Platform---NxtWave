@@ -12,7 +12,7 @@ export function OverviewPage() {
   const o = overview.data;
 
   return (
-    <div className="grid gap-6 animate-rise">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 animate-rise">
       <header>
         <span className="eyebrow">Overview</span>
         <h1 className="mt-1.5 text-[clamp(22px,2.4vw,28px)]">
@@ -25,7 +25,8 @@ export function OverviewPage() {
       {overview.isError && <Alert tone="bad">{errorMessage(overview.error)}</Alert>}
       {o && (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+          {/* Six across only from `xl`: at `lg` the labels would wrap onto two lines. */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
             <Kpi label="Students" value={o.students.total} />
             <Kpi
               label="Goal set"

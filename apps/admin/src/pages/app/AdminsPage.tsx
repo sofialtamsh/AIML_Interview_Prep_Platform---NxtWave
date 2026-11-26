@@ -25,7 +25,7 @@ export function AdminsPage() {
   });
 
   return (
-    <div className="grid gap-6 animate-rise">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 animate-rise">
       <header>
         <span className="eyebrow">Platform</span>
         <h1 className="mt-1.5 text-[clamp(22px,2.4vw,28px)]">Admins</h1>
@@ -117,7 +117,7 @@ function InviteForm() {
       <form
         noValidate
         onSubmit={onSubmit}
-        className="mt-4 grid items-end gap-3 sm:grid-cols-[1fr_180px_auto]"
+        className="mt-4 grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto]"
       >
         <TextField
           name="email"

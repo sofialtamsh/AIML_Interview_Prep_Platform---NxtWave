@@ -105,7 +105,9 @@ export function PlanTimeline({
           )}
           <span>
             {late
-              ? `This runs ${plural(f.daysOver, 'day')} past your deadline (${formatDate(f.deadline)}). Pick a pace below, or move the date.`
+              ? onPick
+                ? `This runs ${plural(f.daysOver, 'day')} past your deadline (${formatDate(f.deadline)}). Pick a pace below, or move the date.`
+                : `At this pace you finish ${plural(f.daysOver, 'day')} after the target date (${formatDate(f.deadline)}). A few extra minutes on your study days closes the gap.`
               : tight
                 ? `You finish ${preview.daysToSpare === 0 ? 'right on' : `${plural(preview.daysToSpare ?? 0, 'day')} before`} your deadline. Leave about ${plural(preview.revisionDays ?? 0, 'day')} for revision and mock interviews.`
                 : `That leaves ${plural(preview.daysToSpare ?? 0, 'day')} before your deadline for revision and practice.`}
@@ -144,7 +146,7 @@ export function PlanTimeline({
           </div>
         </div>
       )}
-      {late && preview.paces.length === 0 && (
+      {late && onPick && preview.paces.length === 0 && (
         <p className="px-5 pt-3 text-[13px] text-muted">
           Even 10 hours a day can't make this date on these days. Try a later deadline.
         </p>

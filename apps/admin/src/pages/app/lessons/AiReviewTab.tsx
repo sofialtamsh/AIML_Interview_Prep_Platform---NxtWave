@@ -95,7 +95,7 @@ export function AiReviewTab({
   );
 
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       {running && job && <JobCard job={job} />}
       {run.isError && <Alert tone="bad">{errorMessage(run.error)}</Alert>}
       {!e ? (

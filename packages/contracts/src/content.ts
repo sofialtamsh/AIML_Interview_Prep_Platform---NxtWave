@@ -129,7 +129,13 @@ export const LessonModuleResponse = z.object({
     slug: z.string(),
     title: z.string(),
     summary: z.string(),
-    topic: z.object({ slug: z.string(), title: z.string(), iconKey: z.string() }),
+    topic: z.object({
+      slug: z.string(),
+      title: z.string(),
+      iconKey: z.string(),
+      /** Where the course sits in the catalog order (0-based); narrators alternate by it. */
+      position: z.number().int(),
+    }),
   }),
   targets: z.array(LessonTargetDto),
   versions: z.array(LessonVersionSummary),
@@ -316,7 +322,13 @@ export const LessonResponse = z.object({
     id: z.string(),
     slug: z.string(),
     title: z.string(),
-    topic: z.object({ slug: z.string(), title: z.string(), iconKey: z.string() }),
+    topic: z.object({
+      slug: z.string(),
+      title: z.string(),
+      iconKey: z.string(),
+      /** Where the course sits in the catalog order (0-based); narrators alternate by it. */
+      position: z.number().int(),
+    }),
   }),
   depth: z.object({ rank: z.number().int(), name: z.string() }),
   lesson: z.object({

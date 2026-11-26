@@ -1,8 +1,16 @@
 import { Alert, Button, buttonClass, Card, cn, errorMessage, Spinner } from '@app/ui';
 import { useMutation } from '@tanstack/react-query';
-import { ArrowRight, CalendarClock, Clock3, Route, SlidersHorizontal } from 'lucide-react';
+import {
+  ArrowRight,
+  CalendarClock,
+  Clock3,
+  Dumbbell,
+  Route,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { Link } from 'react-router';
 import { formatHours, LEVELS, RoleBadge, WEEKDAYS } from '../../features/goal/pickers';
+import { MentorNote } from '../../features/goal/StudyPlan';
 import { ProposalBanner } from '../../features/roadmap/ProposalBanner';
 import {
   DepthMeter,
@@ -14,17 +22,22 @@ import {
   TopicIcon,
 } from '../../features/roadmap/parts';
 import { api, useMe } from '../../lib/api';
-import { useGoal, useRoadmap } from '../../lib/queries';
+import { useCatalog, useGoal, usePractice, useRoadmap, useStudyPlan } from '../../lib/queries';
 
 export function HomePage() {
   const { data: me } = useMe();
   const goal = useGoal();
+  const { data: plan } = useStudyPlan();
+  const { data: catalog } = useCatalog();
   const resend = useMutation({ mutationFn: () => api.post('/auth/resend-verification') });
   const firstName = me?.fullName.split(' ')[0] || 'there';
   const g = goal.data?.goal;
+  // While the team places students in a package, it stays out of the student's view.
+  const showPackage = plan?.studentsChoosePackage ?? false;
+  const tagline = catalog?.roles.find((r) => r.id === g?.role.id)?.tagline;
 
   return (
-    <div className="grid gap-6 animate-rise">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 animate-rise">
       <section>
         <span className="eyebrow">Your prep space</span>
         <h1 className="mt-2 text-[clamp(26px,3vw,36px)]">Hi {firstName} 👋</h1>
@@ -54,6 +67,8 @@ export function HomePage() {
         </Alert>
       )}
 
+      {plan?.message && <MentorNote message={plan.message} />}
+
       {goal.isPending && <Spinner />}
       {goal.isError && <Alert tone="bad">{errorMessage(goal.error)}</Alert>}
 
@@ -65,9 +80,13 @@ export function HomePage() {
               <RoleBadge code={g.role.shortCode} color={g.role.colorKey} size={48} />
               <div>
                 <h2 className="text-[clamp(20px,2.4vw,26px)]">{g.role.title}</h2>
-                <p className="text-sm text-ink-2">
-                  <b className="font-display">{g.bracket.label}</b> · {g.bracket.headline}
-                </p>
+                {showPackage ? (
+                  <p className="text-sm text-ink-2">
+                    <b className="font-display">{g.bracket.label}</b> · {g.bracket.headline}
+                  </p>
+                ) : (
+                  tagline && <p className="text-sm text-ink-2">{tagline}</p>
+                )}
               </div>
             </div>
             <div className="mt-5 grid gap-2 sm:grid-cols-3">
@@ -86,7 +105,8 @@ export function HomePage() {
                 .join(' · ')}
             </p>
             <Link to="/plan" className={cn(buttonClass('secondary', 'sm'), 'mt-5')}>
-              <SlidersHorizontal className="size-3.5" aria-hidden /> Adjust my plan
+              <SlidersHorizontal className="size-3.5" aria-hidden />{' '}
+              {plan?.studentsChooseSchedule ? 'Adjust my plan' : 'See my plan'}
             </Link>
           </Card>
 
@@ -117,7 +137,37 @@ export function HomePage() {
       )}
 
       {g && <RoadmapCard />}
+      {g && <PracticeCard roleTitle={g.role.title} />}
     </div>
+  );
+}
+
+/** A way into the Practice tab, once there is something to practise. */
+function PracticeCard({ roleTitle }: { roleTitle: string }) {
+  const practice = usePractice();
+  const items = practice.data?.items ?? [];
+  if (items.length === 0) return null;
+  const opened = items.filter((q) => q.openedAt).length;
+  return (
+    <Card className="dotgrid flex flex-wrap items-center gap-4 p-5">
+      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-ink text-surface">
+        <Dumbbell className="size-5" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <span className="eyebrow">Practice</span>
+        <h2 className="mt-0.5 text-[17px]">
+          {items.length} interview question{items.length === 1 ? '' : 's'} for {roleTitle}
+        </h2>
+        <p className="text-[13px] text-muted">
+          {opened > 0
+            ? `You have opened ${opened}. Keep the streak going.`
+            : 'Solve them on the NxtWave learning portal, signed in with your NxtWave account.'}
+        </p>
+      </div>
+      <Link to="/practice" className={buttonClass('primary', 'sm')}>
+        Open Practice <ArrowRight className="size-3.5" aria-hidden />
+      </Link>
+    </Card>
   );
 }
 
@@ -219,7 +269,7 @@ function RoadmapCard() {
               <li key={t.id}>
                 <Link
                   to={`/topics/${t.slug}`}
-                  className="flex items-center gap-3 rounded-lg p-1 -m-1 hover:bg-surface-2"
+                  className="flex items-center gap-3 rounded-lg p-1 hover:bg-surface-2"
                 >
                   <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
                     <TopicIcon iconKey={t.iconKey} className="size-4" />

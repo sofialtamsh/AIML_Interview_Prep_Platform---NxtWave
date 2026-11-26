@@ -8,6 +8,7 @@ import {
   OnboardingState,
   Schedule,
   StudentCatalogResponse,
+  StudentStudyPlan,
   UpdateSkillsBody,
 } from '@app/contracts';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -18,7 +19,7 @@ const tags = ['student'];
 /** /api/v1/student — catalog, onboarding, goal and interest for the signed-in student. */
 export const studentGoalsRoutes: FastifyPluginAsyncZod = async (app) => {
   app.addHook('onRequest', requireStudent);
-  const { catalog, goals } = app.services;
+  const { catalog, goals, studyPlan } = app.services;
   const tzOf = (req: Parameters<typeof authOf>[0]) =>
     authOf(req).user.studentProfile?.timezone ?? 'Asia/Kolkata';
 
@@ -42,6 +43,10 @@ export const studentGoalsRoutes: FastifyPluginAsyncZod = async (app) => {
 
   app.get('/goal', { schema: { tags, response: { 200: GoalResponse } } }, (req) =>
     goals.getGoal(authOf(req).user.id, tzOf(req)),
+  );
+  // The team's plan: daily time, days, deadline, a note, and which choices students make.
+  app.get('/study-plan', { schema: { tags, response: { 200: StudentStudyPlan } } }, (req) =>
+    studyPlan.studentView(tzOf(req)),
   );
   app.put(
     '/goal/schedule',

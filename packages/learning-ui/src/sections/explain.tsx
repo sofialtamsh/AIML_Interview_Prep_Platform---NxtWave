@@ -3,17 +3,19 @@ import { Button, cn } from '@app/ui';
 import {
   ArrowDown,
   ArrowRight,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
   Lightbulb,
   Mic,
-  RotateCw,
   Sparkles,
   TriangleAlert,
   Zap,
 } from 'lucide-react';
 import { useState } from 'react';
+import { AnimationView } from '../animations';
+import { iconOf } from '../icons';
 import { layerNodes } from '../layout';
 import { Rich } from '../rich';
 import { SwipeCards } from './swipe-cards';
@@ -23,13 +25,60 @@ type Of<K extends StudentSection['kind']> = Extract<StudentSection, { kind: K }>
 // ───────────── Hook ─────────────
 
 export function HookView({ s }: { s: Of<'HOOK'> }) {
-  const { scenario, provocation, analogy, bridge } = s.body;
+  const { scenario, animation, realWorld, provocation, analogy, bridge } = s.body;
   return (
     <div className="grid gap-4">
-      <div className="dotgrid rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <span className="eyebrow">Picture this</span>
-        <Rich text={scenario} className="mt-2 text-[16px] leading-relaxed text-ink" />
+      <div
+        className={cn(
+          'grid gap-4',
+          animation && 'md:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] md:items-center',
+        )}
+      >
+        <div className="dotgrid rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <span className="eyebrow">Picture this</span>
+          <Rich text={scenario} className="mt-2 text-[16px] leading-relaxed text-ink" />
+        </div>
+        {animation && <AnimationView name={animation.name} caption={animation.caption} />}
       </div>
+      {realWorld && (
+        <div className="grid gap-2.5">
+          <span className="eyebrow">{realWorld.title ?? 'Where you see it'}</span>
+          <ul
+            className={cn(
+              'grid gap-2.5',
+              realWorld.items.length === 3 ? 'sm:grid-cols-3' : 'grid-cols-2',
+              realWorld.items.length === 4 && 'lg:grid-cols-4',
+            )}
+          >
+            {realWorld.items.map((it, i) => {
+              const Icon = iconOf(it.icon);
+              const tone = (['g0', 'g2', 'g3', 'g1'] as const)[i % 4] ?? 'g0';
+              return (
+                <li
+                  key={it.label}
+                  className="grid content-start gap-2 rounded-2xl border border-line bg-surface p-3.5 shadow-soft"
+                >
+                  <span
+                    className="grid size-10 place-items-center rounded-xl"
+                    style={{
+                      background: `color-mix(in oklab, var(--${tone}) 14%, transparent)`,
+                      color: `var(--${tone})`,
+                    }}
+                  >
+                    <Icon className="size-5" aria-hidden />
+                  </span>
+                  <span className="text-[14px] leading-snug font-semibold text-ink">
+                    {it.label}
+                  </span>
+                  {it.sub && (
+                    <span className="text-[12.5px] leading-snug text-muted">{it.sub}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
       {provocation && (
         <p className="flex gap-2.5 font-display text-[17px] font-semibold tracking-tight text-ink">
           <Sparkles className="mt-1 size-4 shrink-0 text-brand" aria-hidden />
@@ -129,7 +178,13 @@ function BlockView({ b }: { b: Block }) {
         <figure className="grid gap-1.5">
           {/* biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable regions must be keyboard-focusable (WCAG 2.1.1) */}
           <div className="overflow-x-auto rounded-xl border border-line" tabIndex={0}>
-            <table className="w-full min-w-[28rem] border-collapse text-left text-[13.5px]">
+            {/* Two columns fit a phone; wider tables scroll sideways instead of squashing. */}
+            <table
+              className={cn(
+                'w-full border-collapse text-left text-[13.5px]',
+                b.columns.length > 2 && 'min-w-[28rem]',
+              )}
+            >
               <thead className="bg-surface-2">
                 <tr>
                   {b.columns.map((c) => (
@@ -255,74 +310,130 @@ function CardFace({ card, showBack = false }: { card: Card; showBack?: boolean }
   );
 }
 
+/**
+ * Question and answer cards, as a list that opens in place. A card is one line until the student
+ * asks for its answer, so twelve questions fit a window and none of them is padded out to the
+ * height of its answer. (They used to flip: both faces shared one box, so every question card
+ * was as tall as its longest answer and mostly blank.)
+ */
 function FlipCards({ cards }: { cards: Card[] }) {
-  const [flipped, setFlipped] = useState<Set<number>>(new Set());
-  const toggle = (i: number) =>
-    setFlipped((f) => {
-      const next = new Set(f);
+  const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
+  const [seen, setSeen] = useState<ReadonlySet<number>>(new Set());
+  const toggle = (i: number) => {
+    setOpen((o) => {
+      const next = new Set(o);
       if (next.has(i)) next.delete(i);
       else next.add(i);
       return next;
     });
+    setSeen((v) => new Set(v).add(i));
+  };
+  const withBack = cards.filter((c) => c.back).length;
+  const allOpen = open.size >= withBack;
   return (
-    <div className="grid gap-3">
-      <p className="text-[12.5px] text-muted">
-        Tap a card to flip it · {flipped.size} of {cards.length} flipped
-      </p>
-      <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <p className="text-[13px] text-ink-2">
+          Say your answer out loud first, then open the card to compare.
+        </p>
+        <div className="flex items-center gap-3 text-[12.5px] text-muted">
+          <span>
+            {seen.size} of {withBack} opened
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              setOpen(
+                allOpen ? new Set() : new Set(cards.map((_, i) => i).filter((i) => cards[i]?.back)),
+              )
+            }
+            className="font-semibold text-brand hover:underline"
+          >
+            {allOpen ? 'Close all' : 'Open all'}
+          </button>
+        </div>
+      </div>
+      <ol className="grid gap-2">
         {cards.map((c, i) => {
-          const on = flipped.has(i);
+          const on = open.has(i);
           return (
-            <button
+            <li
               key={c.title}
-              type="button"
-              aria-pressed={on}
-              aria-label={`${c.title}: ${on ? 'showing the back' : 'showing the front'}. Flip card.`}
-              onClick={() => c.back && toggle(i)}
-              className="group text-left [perspective:1200px]"
+              className={cn(
+                'overflow-hidden rounded-xl border bg-surface transition-colors',
+                on ? 'border-brand/40' : 'border-line hover:border-line-2',
+              )}
             >
-              <span
-                className={cn(
-                  'grid transition-transform duration-500 [transform-style:preserve-3d]',
-                  on && '[transform:rotateY(180deg)]',
-                )}
+              <button
+                type="button"
+                aria-expanded={on}
+                disabled={!c.back}
+                onClick={() => toggle(i)}
+                className="flex w-full items-start gap-3 px-3.5 py-2.5 text-left"
               >
-                <span className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4 shadow-soft [grid-area:1/1] [backface-visibility:hidden] group-hover:border-line-2">
-                  <span className="flex items-center justify-between gap-2">
-                    {c.tag ? <span className="eyebrow">{c.tag}</span> : <span />}
-                    {c.back && <RotateCw className="size-3.5 text-muted" aria-hidden />}
-                  </span>
-                  <span className="font-display text-[16px] font-bold tracking-tight text-ink">
+                <span
+                  className={cn(
+                    'mt-0.5 grid size-6 shrink-0 place-items-center rounded-full font-mono text-[11px] font-bold',
+                    seen.has(i) ? 'bg-ok-bg text-ok' : 'bg-surface-2 text-muted',
+                  )}
+                  aria-hidden
+                >
+                  {i + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14.5px] leading-snug font-semibold text-ink">
                     {c.emoji && (
                       <span className="mr-1.5" aria-hidden>
                         {c.emoji}
                       </span>
                     )}
-                    {c.title}
+                    <Rich text={c.front} inline />
                   </span>
-                  <Rich text={c.front} className="text-[14px] text-ink-2" />
+                  <span className="mt-0.5 block font-mono text-[10.5px] tracking-wide text-muted uppercase">
+                    {c.tag ? `${c.tag} · ${c.title}` : c.title}
+                  </span>
                 </span>
                 {c.back && (
-                  <span className="flex flex-col gap-2 rounded-2xl border border-brand/30 bg-brand-soft p-4 [grid-area:1/1] [backface-visibility:hidden] [transform:rotateY(180deg)]">
-                    <span className="eyebrow text-brand">{c.title}</span>
-                    <Rich text={c.back} className="text-[13.5px] text-ink" />
+                  <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 text-[12.5px] font-semibold text-brand">
+                    <span className="hidden sm:inline">{on ? 'Hide answer' : 'Show answer'}</span>
+                    <ChevronDown
+                      className={cn('size-4 transition-transform', on && 'rotate-180')}
+                      aria-hidden
+                    />
                   </span>
                 )}
-              </span>
-            </button>
+              </button>
+              {on && c.back && (
+                <div className="border-brand/20 border-t bg-brand-soft px-3.5 py-3 pl-[3.125rem] animate-rise">
+                  <span className="eyebrow text-brand">Model answer</span>
+                  <Rich text={c.back} className="mt-1 text-[14px] text-ink" />
+                </div>
+              )}
+            </li>
           );
         })}
-      </div>
+      </ol>
     </div>
   );
 }
 
 function CardStepper({ cards }: { cards: Card[] }) {
   const [i, setI] = useState(0);
-  const card = cards[i] as Card;
   return (
     <div className="grid gap-3">
-      <CardFace card={card} showBack />
+      {/* All cards share one grid cell, so the stepper is as tall as its tallest card and the
+          Back / Next buttons never move. */}
+      <div className="grid">
+        {cards.map((c, j) => (
+          <div
+            key={c.title}
+            aria-hidden={j !== i}
+            className={cn('grid [grid-area:1/1]', j !== i && 'pointer-events-none invisible')}
+          >
+            <CardFace card={c} showBack />
+          </div>
+        ))}
+      </div>
       <div className="flex items-center justify-between gap-3">
         <Button size="sm" variant="secondary" onClick={() => setI(i - 1)} disabled={i === 0}>
           <ChevronLeft className="size-4" aria-hidden /> Back

@@ -1,18 +1,28 @@
 import type { CheckResponse, CheckResult, StudentCheckItem, StudentSection } from '@app/content';
 import { Button, cn, errorMessage } from '@app/ui';
-import { ArrowDown, ArrowUp, CheckCircle2, CircleHelp, RotateCcw, XCircle } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  CheckCircle2,
+  CircleHelp,
+  RotateCcw,
+  Shuffle,
+  XCircle,
+} from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { CodeBlock } from '../code';
-import { useLessonRuntime } from '../context';
+import { safeStorage, useLessonRuntime } from '../context';
 import { Rich } from '../rich';
 
 type CheckSection = Extract<StudentSection, { kind: 'KNOWLEDGE_CHECK' }>;
 
 export function KnowledgeCheckView({ s }: { s: CheckSection }) {
-  const total = s.body.items.length;
+  const { items, draw } = s.body;
+  if (draw && draw < items.length) return <Quiz s={s} draw={draw} />;
+  const total = items.length;
   return (
     <div className="grid gap-4">
-      {s.body.items.map((item, i) => (
+      {items.map((item, i) => (
         <CheckCard
           key={item.key}
           section={s}
@@ -20,6 +30,248 @@ export function KnowledgeCheckView({ s }: { s: CheckSection }) {
           label={total > 1 ? `Question ${i + 1} of ${total}` : 'Question'}
         />
       ))}
+    </div>
+  );
+}
+
+/** One attempt at a quiz: which questions were drawn, and how each was answered. */
+interface Attempt {
+  n: number;
+  keys: string[];
+  /** Item key → right or wrong, for the questions answered in this attempt. */
+  results: Record<string, boolean>;
+}
+
+/** `count` questions, those in `first` before the rest, each group in a random order. */
+function drawFrom(all: string[], first: ReadonlySet<string>, count: number): string[] {
+  const shuffled = (list: string[]) => {
+    const out = [...list];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j] as string, out[i] as string];
+    }
+    return out;
+  };
+  return [
+    ...shuffled(all.filter((k) => first.has(k))),
+    ...shuffled(all.filter((k) => !first.has(k))),
+  ].slice(0, count);
+}
+
+/**
+ * A quiz drawn from a pool. Each attempt shows `draw` questions; "New questions" draws again,
+ * taking the questions not yet answered correctly first, so another attempt is new work and not
+ * a memory test. The attempt on screen is kept in this browser, so leaving and coming back
+ * shows the same questions with their answers. Every answer is graded by the host as usual.
+ */
+function Quiz({ s, draw }: { s: CheckSection; draw: number }) {
+  const runtime = useLessonRuntime();
+  const storageKey = `${runtime.storagePrefix}:quiz:${s.revisionId}`;
+  const all = s.body.items.map((i) => i.key);
+  const byKey = new Map(s.body.items.map((i) => [i.key, i]));
+  const rightSoFar = () =>
+    new Set(all.filter((k) => runtime.attempts.get(`${s.key}#${k}`)?.result.correct === true));
+  const fresh = (n: number): Attempt => {
+    const right = rightSoFar();
+    return { n, keys: drawFrom(all, new Set(all.filter((k) => !right.has(k))), draw), results: {} };
+  };
+  const [attempt, setAttempt] = useState<Attempt>(() => {
+    try {
+      const saved = JSON.parse(safeStorage.get(storageKey) ?? 'null') as Attempt | null;
+      if (
+        saved &&
+        Array.isArray(saved.keys) &&
+        saved.keys.length === draw &&
+        saved.keys.every((k) => byKey.has(k))
+      ) {
+        return { n: saved.n || 1, keys: saved.keys, results: saved.results ?? {} };
+      }
+    } catch {
+      /* a broken note in storage: start a new attempt */
+    }
+    // A quiz answered before this browser kept attempts: show those questions, answered.
+    const answered = all.filter((k) => runtime.attempts.has(`${s.key}#${k}`));
+    if (answered.length >= draw) {
+      const keys = answered.slice(0, draw);
+      return {
+        n: 1,
+        keys,
+        results: Object.fromEntries(
+          keys.map((k) => [k, runtime.attempts.get(`${s.key}#${k}`)?.result.correct === true]),
+        ),
+      };
+    }
+    return fresh(1);
+  });
+  const keep = (next: Attempt) => {
+    setAttempt(next);
+    safeStorage.set(storageKey, JSON.stringify(next));
+  };
+
+  const total = attempt.keys.length;
+  const answered = attempt.keys.filter((k) => k in attempt.results).length;
+  const right = attempt.keys.filter((k) => attempt.results[k]).length;
+  const finished = answered === total;
+  const perfect = finished && right === total;
+  // One question on screen at a time; `total` is the score card after the last one.
+  const firstOpen = attempt.keys.findIndex((k) => !(k in attempt.results));
+  const [at, setAt] = useState(firstOpen < 0 ? total : firstOpen);
+  const currentKey = attempt.keys[at];
+  const current = currentKey ? byKey.get(currentKey) : undefined;
+  const currentDone = currentKey !== undefined && currentKey in attempt.results;
+
+  return (
+    <div className="grid gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-[13px] text-ink-2">
+        <span>
+          <span className="font-semibold text-ink">
+            {attempt.n > 1 ? `Attempt ${attempt.n} · ` : ''}
+            {draw} questions
+          </span>{' '}
+          drawn from a pool of {all.length}. Every attempt gets a different set.
+        </span>
+        {/* One dot per question: where you are, and how each answered one went. */}
+        <ol className="flex items-center gap-1.5" aria-label="Questions in this attempt">
+          {attempt.keys.map((k, i) => {
+            const done = k in attempt.results;
+            const ok = attempt.results[k] === true;
+            const reachable = done || i === firstOpen;
+            return (
+              <li key={k}>
+                <button
+                  type="button"
+                  disabled={!reachable}
+                  onClick={() => setAt(i)}
+                  aria-current={i === at ? 'step' : undefined}
+                  aria-label={`Question ${i + 1}${done ? (ok ? ': correct' : ': not correct') : ''}`}
+                  className={cn(
+                    'grid size-6 place-items-center rounded-full border font-mono text-[11px] font-bold transition',
+                    done
+                      ? ok
+                        ? 'border-ok bg-ok-bg text-ok'
+                        : 'border-bad bg-bad-bg text-bad'
+                      : 'border-line-2 bg-surface text-muted',
+                    i === at && 'ring-2 ring-brand ring-offset-1 ring-offset-surface-2',
+                  )}
+                >
+                  {i + 1}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+
+      {current && currentKey && (
+        <>
+          <CheckCard
+            key={`${attempt.n}:${currentKey}`}
+            section={s}
+            item={current}
+            label={`Question ${at + 1} of ${total}`}
+            // An answer from an earlier attempt is not this attempt's answer.
+            usePrior={currentDone}
+            retry={false}
+            onResult={(correct) => {
+              if (correct === null) return;
+              setAttempt((old) => {
+                // The first answer in an attempt is the one that counts.
+                if (currentKey in old.results) return old;
+                const next = { ...old, results: { ...old.results, [currentKey]: correct } };
+                safeStorage.set(storageKey, JSON.stringify(next));
+                return next;
+              });
+            }}
+          />
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={at === 0}
+              onClick={() => setAt(at - 1)}
+            >
+              Previous question
+            </Button>
+            {currentDone ? (
+              <Button type="button" size="sm" onClick={() => setAt(at + 1)}>
+                {at === total - 1 ? 'See your score' : 'Next question'}
+              </Button>
+            ) : (
+              <span className="text-[12.5px] text-muted">Pick an answer, then press Check.</span>
+            )}
+          </div>
+        </>
+      )}
+
+      {at >= total && finished && (
+        <div
+          className={cn(
+            'grid gap-4 rounded-2xl border p-4 animate-rise sm:p-5',
+            perfect ? 'border-ok/35 bg-ok-bg' : 'border-line bg-surface',
+          )}
+          aria-live="polite"
+        >
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="font-display text-[26px] leading-none font-bold text-ink">
+              {right} / {total}
+            </span>
+            <span className="text-[14px] text-ink-2">
+              {perfect
+                ? 'All correct. Continue, or test yourself on a new set.'
+                : right >= total - 1
+                  ? 'Nearly there. Open the one you missed to read why, then try a new set.'
+                  : 'Open the ones you missed to read why. A new set brings those questions back first.'}
+            </span>
+          </div>
+          <ol className="grid gap-1.5">
+            {attempt.keys.map((k, i) => {
+              const item = byKey.get(k);
+              const ok = attempt.results[k] === true;
+              return (
+                <li key={k}>
+                  <button
+                    type="button"
+                    onClick={() => setAt(i)}
+                    className="flex w-full items-start gap-2.5 rounded-lg border border-line bg-surface px-3 py-2 text-left text-[13.5px] hover:border-line-2"
+                  >
+                    {ok ? (
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-ok" aria-hidden />
+                    ) : (
+                      <XCircle className="mt-0.5 size-4 shrink-0 text-bad" aria-hidden />
+                    )}
+                    <span className="min-w-0 flex-1 text-ink">
+                      <span className="sr-only">{ok ? 'Correct: ' : 'Not correct: '}</span>
+                      {item && 'prompt' in item && item.prompt ? (
+                        <Rich text={item.prompt} inline />
+                      ) : (
+                        `Question ${i + 1}`
+                      )}
+                    </span>
+                    <span className="shrink-0 text-[12.5px] font-semibold text-brand">Review</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="dark"
+              onClick={() => {
+                keep(fresh(attempt.n + 1));
+                setAt(0);
+              }}
+            >
+              <Shuffle className="size-3.5" aria-hidden /> New questions
+            </Button>
+            <span className="text-[12.5px] text-muted">
+              Or press Continue at the bottom to move on.
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -92,13 +344,22 @@ function CheckCard({
   section,
   item,
   label,
+  usePrior = true,
+  retry = true,
+  onResult,
 }: {
   section: CheckSection;
   item: StudentCheckItem;
   label: string;
+  /** False starts the question blank even if it was answered before (a new quiz attempt). */
+  usePrior?: boolean;
+  /** Whether a wrong answer may be tried again in place. A quiz draws new questions instead. */
+  retry?: boolean;
+  /** Told each graded answer: right, wrong, or null while a written answer awaits its rating. */
+  onResult?: (correct: boolean | null) => void;
 }) {
   const runtime = useLessonRuntime();
-  const prior = runtime.attempts.get(`${section.key}#${item.key}`);
+  const prior = usePrior ? runtime.attempts.get(`${section.key}#${item.key}`) : undefined;
   const [draft, setDraft] = useState<Draft>(() => initialDraft(item, prior?.response));
   const [result, setResult] = useState<CheckResult | null>(prior?.result ?? null);
   const [rating, setRating] = useState(
@@ -119,6 +380,7 @@ function CheckCard({
       });
       setResult(r);
       runtime.onAttempt?.(section.key, item.key, { response, result: r });
+      onResult?.(r.correct);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -235,7 +497,7 @@ function CheckCard({
             ) : (
               <XCircle className="size-4 text-bad" aria-hidden />
             )}
-            {result.correct ? 'Nailed it 🎉' : "Not quite. Here's why."}
+            {result.correct ? 'Correct.' : "Not quite. Here's why."}
           </span>
           {result.explanation && (
             <Rich text={result.explanation} className="text-[13.5px] text-ink" />
@@ -243,7 +505,7 @@ function CheckCard({
         </div>
       )}
 
-      {graded && item.type !== 'reasoning' && !result.correct && (
+      {retry && graded && item.type !== 'reasoning' && !result.correct && (
         <Button
           type="button"
           size="sm"

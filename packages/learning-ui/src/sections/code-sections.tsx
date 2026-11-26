@@ -1,19 +1,29 @@
 import type { StudentSection } from '@app/content';
-import { Badge, Button, cn } from '@app/ui';
+import { Button, cn } from '@app/ui';
 import {
   CheckCircle2,
   ChevronDown,
-  CircleDashed,
   Eye,
   Info,
   Lightbulb,
   RotateCcw,
+  SquareTerminal,
   ThumbsUp,
   TriangleAlert,
   XCircle,
 } from 'lucide-react';
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { CodeBlock, OutputPanel, RunButton, RunHint, useRunner } from '../code';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  CodeBlock,
+  CodeEditor,
+  IdeAction,
+  IdleTerminal,
+  OutputPanel,
+  RunButton,
+  RunHint,
+  RunMark,
+  useRunner,
+} from '../code';
 import { safeStorage, useLessonRuntime } from '../context';
 import { sameOutput } from '../python/runner';
 import { Rich } from '../rich';
@@ -28,12 +38,24 @@ export function CodeExampleView({ s }: { s: Of<'CODE_EXAMPLE'> }) {
   const runner = useRunner();
   const range = active === null ? null : (annotations[active]?.lines ?? null);
   const live = runner.result;
-  const matches =
-    live && expectedOutput !== undefined && live.ok && sameOutput(live.stdout, expectedOutput);
+  const matches = Boolean(
+    live?.ok && expectedOutput !== undefined && sameOutput(live.stdout, expectedOutput),
+  );
+  const run = () => runner.run(code, packages);
 
   return (
     <div className="grid gap-3">
-      <CodeBlock code={code} language={language} highlight={range} />
+      <CodeBlock
+        code={code}
+        language={language}
+        highlight={range}
+        label="example.py"
+        actions={
+          runnable ? (
+            <RunButton busy={runner.busy} state={runner.state} label="Run" onClick={run} />
+          ) : null
+        }
+      />
       {annotations.length > 0 && (
         <ol className="grid gap-1.5" aria-label="What each part does">
           {annotations.map((a, i) => (
@@ -50,7 +72,7 @@ export function CodeExampleView({ s }: { s: Of<'CODE_EXAMPLE'> }) {
                     : 'border-line bg-surface hover:border-line-2',
                 )}
               >
-                <span className="shrink-0 font-mono text-[11.5px] font-semibold text-brand">
+                <span className="shrink-0 rounded-md bg-ink px-1.5 py-0.5 font-mono text-[11px] font-semibold text-surface">
                   {a.lines[0] === a.lines[1] ? `L${a.lines[0]}` : `L${a.lines[0]}–${a.lines[1]}`}
                 </span>
                 <Rich text={a.note} inline />
@@ -61,33 +83,31 @@ export function CodeExampleView({ s }: { s: Of<'CODE_EXAMPLE'> }) {
       )}
       {runnable && (
         <div className="grid gap-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <RunButton
-              busy={runner.busy}
-              state={runner.state}
-              label={live ? 'Run again' : 'Run it yourself'}
-              onClick={() => runner.run(code, packages)}
-            />
-            <RunHint state={runner.state} busy={runner.busy} />
-          </div>
+          <RunHint state={runner.state} busy={runner.busy} />
+          {/* Code with a Run button never shows its output first: the student runs it to see
+              what it prints. The expected output appears only under a run that did not match. */}
           {live ? (
-            <OutputPanel
-              title={`Your run · ${live.ms} ms`}
-              text={live.stdout}
-              error={live.error}
-              tone={live.ok ? (matches ? 'ok' : 'neutral') : 'bad'}
-              badge={
-                matches ? (
-                  <Badge tone="ok">Matches the lesson</Badge>
-                ) : live.ok && expectedOutput !== undefined ? (
-                  <Badge tone="warn">Different output</Badge>
-                ) : null
-              }
-            />
+            <>
+              <OutputPanel
+                title="Terminal"
+                text={live.stdout}
+                error={live.error}
+                ms={live.ms}
+                command="python example.py"
+                tone={live.ok ? (matches ? 'ok' : 'neutral') : 'bad'}
+                badge={expectedOutput !== undefined ? <RunMark ok={matches} /> : null}
+              />
+              {expectedOutput !== undefined && !matches && (
+                <OutputPanel title="Expected output" text={expectedOutput} command={null} />
+              )}
+            </>
           ) : (
-            expectedOutput !== undefined && <OutputPanel title="Output" text={expectedOutput} />
+            <IdleTerminal />
           )}
         </div>
+      )}
+      {!runnable && expectedOutput !== undefined && (
+        <OutputPanel title="Output" text={expectedOutput} />
       )}
     </div>
   );
@@ -103,11 +123,22 @@ export function CodeExplorerView({ s }: { s: Of<'CODE_EXPLORER'> }) {
   const [seen, setSeen] = useState<Set<string>>(() => new Set([signature(controls, defaultState)]));
   const [showSetup, setShowSetup] = useState(false);
   const runner = useRunner();
+  // Which combination the latest run belongs to: a run that finishes after the student has
+  // moved on is never shown under another combination's code.
+  const [ranFor, setRanFor] = useState<string | null>(null);
 
   const sig = signature(controls, choice);
   const state = states.find((st) => signature(controls, st.when) === sig) as
     | ExplorerState
     | undefined;
+  const ran = ranFor === sig ? runner.result : null;
+  const expected = state?.output.kind === 'text' ? state.output.value : null;
+  const matches = Boolean(ran?.ok && expected !== null && sameOutput(ran.stdout, expected));
+  const run = async () => {
+    if (!state) return;
+    await runner.run(`${setup ?? ''}\n${state.code}`, packages);
+    setRanFor(sig);
+  };
 
   const pick = (id: string, value: string) => {
     const next = { ...choice, [id]: value };
@@ -165,43 +196,45 @@ export function CodeExplorerView({ s }: { s: Of<'CODE_EXPLORER'> }) {
             />
             {showSetup ? 'Hide' : 'Show'} the setup code
           </button>
-          {showSetup && <CodeBlock code={setup} label="setup (runs first)" />}
+          {showSetup && <CodeBlock code={setup} label="setup.py" />}
         </div>
       )}
 
       {state && (
         <div className="grid gap-3" aria-live="polite">
-          <CodeBlock code={state.code} />
-          {state.output.kind === 'text' ? (
-            <OutputPanel text={state.output.value} />
+          <CodeBlock
+            code={state.code}
+            label="explore.py"
+            actions={
+              <RunButton busy={runner.busy} state={runner.state} label="Run" onClick={run} />
+            }
+          />
+          <RunHint state={runner.state} busy={runner.busy} />
+          {/* Every combination starts on an empty terminal. After a run: the student's real
+              output with a tick or a cross, the expected output only if theirs differs (a table
+              result is always drawn, it has no text to compare), then what the result means. */}
+          {ran ? (
+            <>
+              <OutputPanel
+                title="Terminal"
+                text={ran.stdout}
+                error={ran.error}
+                ms={ran.ms}
+                command="python explore.py"
+                tone={ran.ok ? (matches || expected === null ? 'ok' : 'neutral') : 'bad'}
+                badge={expected !== null ? <RunMark ok={matches} /> : null}
+              />
+              {state.output.kind === 'table' ? (
+                <ExplorerTable output={state.output} />
+              ) : (
+                !matches && (
+                  <OutputPanel title="Expected output" text={state.output.value} command={null} />
+                )
+              )}
+              <Verdict tone={state.verdict.tone} text={state.verdict.text} />
+            </>
           ) : (
-            <ExplorerTable output={state.output} />
-          )}
-          <Verdict tone={state.verdict.tone} text={state.verdict.text} />
-          <div className="flex flex-wrap items-center gap-3">
-            <RunButton
-              variant="secondary"
-              busy={runner.busy}
-              state={runner.state}
-              label="Run this for real"
-              onClick={() => runner.run(`${setup ?? ''}\n${state.code}`, packages)}
-            />
-            <RunHint state={runner.state} busy={runner.busy} />
-          </div>
-          {runner.result && (
-            <OutputPanel
-              title={`Live run · ${runner.result.ms} ms`}
-              text={runner.result.stdout}
-              error={runner.result.error}
-              tone={runner.result.ok ? 'ok' : 'bad'}
-              badge={
-                state.output.kind === 'text' &&
-                runner.result.ok &&
-                sameOutput(runner.result.stdout, state.output.value) ? (
-                  <Badge tone="ok">Same as above</Badge>
-                ) : null
-              }
-            />
+            <IdleTerminal />
           )}
         </div>
       )}
@@ -258,12 +291,22 @@ function ExplorerTable({
   );
 }
 
-export function Verdict({ tone, text }: { tone: 'ok' | 'bad' | 'info'; text: string }) {
+export function Verdict({
+  tone,
+  text,
+  compact = false,
+}: {
+  tone: 'ok' | 'bad' | 'info';
+  text: string;
+  /** A caption under a picture: tighter, so the picture keeps its height. */
+  compact?: boolean;
+}) {
   const Icon = tone === 'ok' ? CheckCircle2 : tone === 'bad' ? XCircle : Info;
   return (
     <div
       className={cn(
-        'flex gap-2.5 rounded-xl border px-4 py-3 text-[14px] text-ink',
+        'flex rounded-xl border text-ink',
+        compact ? 'gap-2 px-3 py-2 text-[13px] leading-snug' : 'gap-2.5 px-4 py-3 text-[14px]',
         tone === 'ok' && 'border-ok/35 bg-ok-bg',
         tone === 'bad' && 'border-bad/35 bg-bad-bg',
         tone === 'info' && 'border-line bg-surface-2',
@@ -289,6 +332,9 @@ export function PlaygroundView({ s }: { s: Of<'PLAYGROUND'> }) {
   const storageKey = `${runtime.storagePrefix}:playground:${s.revisionId}`;
   const [code, setCode] = useState(() => safeStorage.get(storageKey) ?? starterCode);
   const [hintsShown, setHintsShown] = useState(0);
+  // A test's description usually states the answer ("the slope is 2"), so it works like a hint:
+  // hidden until the student asks, or until that test passes and there is nothing left to give away.
+  const [testsShown, setTestsShown] = useState(false);
   const [solution, setSolution] = useState<string | null>(null);
   const [loadingSolution, setLoadingSolution] = useState(false);
   const runner = useRunner();
@@ -312,6 +358,7 @@ export function PlaygroundView({ s }: { s: Of<'PLAYGROUND'> }) {
     [runner.result, checks],
   );
   const allPass = results?.every((r) => r.pass) ?? false;
+  const labelsOpen = testsShown || solution !== null;
 
   const reveal = async () => {
     setLoadingSolution(true);
@@ -322,40 +369,59 @@ export function PlaygroundView({ s }: { s: Of<'PLAYGROUND'> }) {
     }
   };
 
+  const run = () => runner.run(code, packages);
+  const passed = results?.filter((r) => r.pass).length ?? 0;
+
   return (
-    <div className="grid gap-4">
-      <div className="rounded-2xl border border-line bg-surface-2 p-4">
-        <span className="eyebrow">Your task</span>
-        <Rich text={instructions} className="mt-1.5 text-[14.5px]" />
+    <div className="grid gap-3">
+      <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+        <div className="flex items-center gap-2 border-b border-line bg-surface-2 px-4 py-2">
+          <SquareTerminal className="size-4 text-brand" aria-hidden />
+          <span className="text-[13px] font-semibold text-ink">Problem</span>
+          <span className="ml-auto font-mono text-[11px] text-muted">
+            {checks.length} test{checks.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        <div className="grid gap-3 p-4">
+          <Rich text={instructions} className="text-[14.5px]" />
+        </div>
       </div>
 
-      <CodeEditor value={code} onChange={setCode} label="Your code" />
+      <CodeEditor
+        value={code}
+        onChange={setCode}
+        label="Your code"
+        filename="solution.py"
+        onRun={run}
+        actions={
+          <>
+            {hintsShown < hints.length && (
+              <IdeAction onClick={() => setHintsShown(hintsShown + 1)} label="Show a hint">
+                <Lightbulb className="size-3.5" aria-hidden /> Hint
+              </IdeAction>
+            )}
+            <IdeAction
+              onClick={() => {
+                setCode(starterCode);
+                runner.clear();
+              }}
+              disabled={code === starterCode}
+              label="Reset to the starter code"
+            >
+              <RotateCcw className="size-3.5" aria-hidden /> Reset
+            </IdeAction>
+          </>
+        }
+      />
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <RunButton
-          variant="primary"
           busy={runner.busy}
           state={runner.state}
-          label="Run and check"
-          onClick={() => runner.run(code, packages)}
+          label="Run tests"
+          shortcut
+          onClick={run}
         />
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            setCode(starterCode);
-            runner.clear();
-          }}
-          disabled={code === starterCode}
-        >
-          <RotateCcw className="size-3.5" aria-hidden /> Reset
-        </Button>
-        {hintsShown < hints.length && (
-          <Button size="sm" variant="ghost" onClick={() => setHintsShown(hintsShown + 1)}>
-            <Lightbulb className="size-3.5" aria-hidden />{' '}
-            {hintsShown === 0 ? 'Get a hint' : 'Another hint'}
-          </Button>
-        )}
         <RunHint state={runner.state} busy={runner.busy} />
       </div>
 
@@ -373,37 +439,73 @@ export function PlaygroundView({ s }: { s: Of<'PLAYGROUND'> }) {
         </ol>
       )}
 
-      {runner.result && (
+      {runner.result ? (
         <OutputPanel
+          title="Terminal"
           text={runner.result.stdout}
           error={runner.result.error}
+          ms={runner.result.ms}
+          command="python solution.py"
           tone={runner.result.ok ? (allPass ? 'ok' : 'neutral') : 'bad'}
         />
+      ) : (
+        <IdleTerminal hint="Write your code, then Run tests." />
       )}
 
-      <ul className="grid gap-1.5" aria-label="Checks">
-        {(results ?? checks.map((c) => ({ ...c, pass: null as boolean | null }))).map((c) => (
-          <li key={c.label} className="flex items-center gap-2 text-[13.5px]">
-            {c.pass === null ? (
-              <CircleDashed className="size-4 text-muted" aria-hidden />
-            ) : c.pass ? (
-              <CheckCircle2 className="size-4 text-ok" aria-hidden />
-            ) : (
-              <XCircle className="size-4 text-bad" aria-hidden />
+      <section
+        className="overflow-hidden rounded-xl border border-[#1f2a3d] bg-[#070b12] font-mono text-[12.5px]"
+        aria-label="Test results"
+      >
+        <div className="flex items-center justify-between border-b border-[#1f2a3d] bg-[#0b111c] px-3 py-1.5">
+          <span className="text-[11px] font-semibold tracking-[0.08em] text-[#8a9bb5] uppercase">
+            Tests
+          </span>
+          <span className="flex items-center gap-3">
+            {!labelsOpen && (
+              <button
+                type="button"
+                onClick={() => setTestsShown(true)}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-[#8a9bb5] hover:bg-[#1a2436] hover:text-[#c9d4e5]"
+              >
+                <Lightbulb className="size-3" aria-hidden /> Show what the tests expect
+              </button>
             )}
-            <span className={cn(c.pass === false && 'text-ink', c.pass === null && 'text-ink-2')}>
-              {c.label}
+            <span
+              className={cn(
+                'text-[11.5px] font-semibold',
+                results === null ? 'text-[#5b6b85]' : allPass ? 'text-[#3fb950]' : 'text-[#ffcb6b]',
+              )}
+            >
+              {results === null ? 'not run yet' : `${passed}/${checks.length} passed`}
             </span>
-            <span className="sr-only">
-              {c.pass === null ? 'not run yet' : c.pass ? 'passed' : 'not yet'}
-            </span>
-          </li>
-        ))}
-      </ul>
+          </span>
+        </div>
+        <ul className="grid gap-1 px-3.5 py-3">
+          {(results ?? checks.map((c) => ({ ...c, pass: null as boolean | null }))).map((c, i) => (
+            <li key={c.label} className="flex items-start gap-2.5 text-[#c9d4e5]">
+              <span
+                className={cn(
+                  'shrink-0 rounded px-1.5 text-[10.5px] font-bold',
+                  c.pass === null && 'bg-[#1a2436] text-[#5b6b85]',
+                  c.pass === true && 'bg-[#238636] text-white',
+                  c.pass === false && 'bg-[#da3633] text-white',
+                )}
+              >
+                {c.pass === null ? 'WAIT' : c.pass ? 'PASS' : 'FAIL'}
+              </span>
+              {labelsOpen || c.pass === true ? (
+                <span>{c.label}</span>
+              ) : (
+                <span className="text-[#5b6b85]">Test {i + 1}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
 
       {allPass && (
         <div className="flex items-center gap-2.5 rounded-xl border border-ok/35 bg-ok-bg px-4 py-3 text-[14px] font-medium text-ink animate-rise">
-          <ThumbsUp className="size-4 text-ok" aria-hidden /> Every check passes. Nicely done.
+          <ThumbsUp className="size-4 text-ok" aria-hidden /> All tests pass. Nicely done.
         </div>
       )}
 
@@ -421,15 +523,18 @@ export function PlaygroundView({ s }: { s: Of<'PLAYGROUND'> }) {
               {allPass ? 'Compare with our solution' : 'Show the solution'}
             </Button>
           ) : (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="eyebrow">Our solution</span>
-                <Button size="sm" variant="ghost" onClick={() => setCode(solution)}>
-                  Use it in the editor
-                </Button>
-              </div>
-              <CodeBlock code={solution} label="solution" />
-            </>
+            <CodeBlock
+              code={solution}
+              label="our_solution.py"
+              actions={
+                <IdeAction
+                  onClick={() => setCode(solution)}
+                  label="Copy the solution into your editor"
+                >
+                  Use in editor
+                </IdeAction>
+              }
+            />
           )}
           {!allPass && solution === null && (
             <span className="flex items-center gap-1.5 text-[12px] text-muted">
@@ -443,74 +548,4 @@ export function PlaygroundView({ s }: { s: Of<'PLAYGROUND'> }) {
   );
 }
 
-/** A plain, accessible code editor: a textarea with line numbers and Tab indenting. */
-export function CodeEditor({
-  value,
-  onChange,
-  label,
-  minRows = 8,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  label: string;
-  minRows?: number;
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const lines = Math.max(minRows, value.split('\n').length);
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key !== 'Tab' || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
-    e.preventDefault();
-    const el = e.currentTarget;
-    const { selectionStart: a, selectionEnd: b } = el;
-    const next = `${value.slice(0, a)}    ${value.slice(b)}`;
-    onChange(next);
-    requestAnimationFrame(() => {
-      el.selectionStart = el.selectionEnd = a + 4;
-    });
-  };
-  return (
-    <div className="overflow-hidden rounded-xl border border-line-2 bg-surface focus-within:border-brand">
-      <div className="flex items-center justify-between border-b border-line bg-surface-2 px-3 py-1.5">
-        <span className="font-mono text-[11px] font-semibold tracking-wide text-muted uppercase">
-          {label}
-        </span>
-        <span className="text-[11px] text-muted">Tab indents · Esc then Tab leaves</span>
-      </div>
-      <div className="grid grid-cols-[2.75rem_1fr] font-mono text-[12.5px] leading-[1.65]">
-        <div
-          className="bg-surface-2/60 py-2.5 pr-3 text-right text-muted/70 select-none"
-          aria-hidden
-        >
-          {Array.from({ length: lines }, (_, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: line numbers are positional
-            <div key={i}>{i + 1}</div>
-          ))}
-        </div>
-        <textarea
-          ref={ref}
-          aria-label={label}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              (e.currentTarget as HTMLTextAreaElement & { dataset: DOMStringMap }).dataset.escaped =
-                '1';
-              return;
-            }
-            if ((e.currentTarget as HTMLTextAreaElement).dataset.escaped === '1') {
-              (e.currentTarget as HTMLTextAreaElement).dataset.escaped = '';
-              if (e.key === 'Tab') return; // let focus move on
-            }
-            onKeyDown(e);
-          }}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoComplete="off"
-          wrap="off"
-          rows={lines}
-          className="resize-none overflow-x-auto bg-transparent px-3 py-2.5 whitespace-pre text-ink outline-none"
-        />
-      </div>
-    </div>
-  );
-}
+export { CodeEditor };

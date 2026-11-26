@@ -40,6 +40,16 @@
   --shadow-lift: 0 2px 4px rgb(11 21 38 / 0.04), 0 24px 48px -16px rgb(11 21 38 / 0.18);
 }
 
+/* `snug:` styles a page with little vertical room for its content: a window that is not tall
+   (a laptop browser that is not full screen leaves about 580 to 620px of page), or a screen
+   narrower than `lg`, where the lesson's step bar is fixed over the bottom of the window.
+   Lesson chrome tightens there so the content keeps its room. */
+@custom-variant snug {
+  @media (max-height: 700px), (width < 64rem) {
+    @slot;
+  }
+}
+
 :root {
   color-scheme: light;
   --bg: #f7f8fb;
@@ -161,6 +171,19 @@
     background: var(--brand-soft);
     color: var(--brand-deep);
   }
+  /* Code shows exactly what to type: no ligatures (JetBrains Mono would draw `>=` as ≥ and `!=`
+     as ≠, which students then copy into Python). */
+  code,
+  pre,
+  kbd,
+  samp,
+  textarea,
+  .font-mono {
+    font-variant-ligatures: none;
+    font-feature-settings:
+      'calt' 0,
+      'liga' 0;
+  }
 }
 
 @utility dotgrid {
@@ -212,6 +235,64 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* Slide decks: the incoming slide glides in from the side it came from, and its parts build in
+   one after another (each element sets --i for its place in the order). */
+@keyframes deck-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes deck-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes build-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.deck-slide.is-active.from-right {
+  animation: deck-in-right 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.deck-slide.is-active.from-left {
+  animation: deck-in-left 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.deck-slide.is-active .build {
+  animation: build-in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(120ms + var(--i, 0) * 110ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .deck-slide.is-active .build {
+    animation-delay: 0ms;
+  }
+}
+
+/* A bar that fills from the left, e.g. the timeline of an animated lesson visual. */
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
   }
 }
 
