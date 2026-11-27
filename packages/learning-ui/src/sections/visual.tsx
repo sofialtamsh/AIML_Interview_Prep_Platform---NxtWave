@@ -456,7 +456,7 @@ function TypingDots({ from, name }: { from: 'interviewer' | 'candidate'; name: s
         {[0, 1, 2].map((d) => (
           <span
             key={d}
-            className="size-1.5 animate-bounce rounded-full bg-muted"
+            className="size-1.5 animate-pulse rounded-full bg-muted"
             style={{ animationDelay: `${d * 140}ms` }}
           />
         ))}

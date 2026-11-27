@@ -178,26 +178,64 @@ describe('read-aloud narration is opt-in', () => {
     expect(under({ narration: true })).toContain('narration-on');
   });
 
-  it('draws a deck with no listen control when narration is off, and all its other controls', () => {
-    const html = draw({
-      key: 'slides.voice',
-      kind: 'SLIDES',
-      depthRank: 1,
-      body: {
-        slides: [
-          { title: 'First slide', body: 'Something to read.' },
-          { title: 'Second slide', body: 'Something more to read.' },
-        ],
-      },
-    });
+  const twoSlides = {
+    key: 'slides.voice',
+    kind: 'SLIDES',
+    depthRank: 1,
+    body: {
+      slides: [
+        { title: 'First slide', kicker: 'Opening', body: 'Something to read.' },
+        { title: 'Second slide', body: 'Something more to read.' },
+      ],
+    },
+  };
+
+  it('draws a deck with no play or listen control when narration is off', () => {
+    const html = draw(twoSlides);
     expect(html).not.toMatch(/aloud/i);
-    for (const control of [
-      'Previous slide',
-      'Next slide',
-      'Play the slides',
-      'Show the slides full screen',
-    ])
-      expect(html).toContain(control);
+    expect(html).not.toContain('Play the slides');
+  });
+
+  it('offers play with narration on', () => {
+    expect(draw(twoSlides, { narration: true })).toContain('Play the slides');
+  });
+});
+
+describe('a slide deck is turned by one set of buttons', () => {
+  const deck = {
+    key: 'slides.turn',
+    kind: 'SLIDES',
+    depthRank: 1,
+    body: {
+      slides: [
+        { title: 'First slide', kicker: 'Opening', body: 'Something to read.' },
+        { title: 'Second slide', points: ['One point', 'Another point'] },
+      ],
+    },
+  };
+
+  it('says where the student is in the deck, and lets them jump to any slide', () => {
+    const html = draw(deck);
+    expect(html).toContain('Slide 1 of 2 · Opening');
+    expect(html).toContain('Go to slide 2: Second slide');
+  });
+
+  it('draws its own previous and next where the host has no step bar (a preview)', () => {
+    const html = draw(deck);
+    expect(html).toContain('Previous slide');
+    expect(html).toContain('Next slide');
+  });
+
+  it('leaves the turning to the lesson’s step bar where there is one', () => {
+    const html = draw(deck, { reportFlow: () => {} });
+    expect(html).not.toContain('Previous slide');
+    expect(html).not.toContain('aria-label="Next slide"');
+    // Still there: the way to jump straight to a slide.
+    expect(html).toContain('Go to slide 2: Second slide');
+  });
+
+  it('has no full-screen control: the deck already is the page', () => {
+    expect(draw(deck)).not.toMatch(/full screen/i);
   });
 });
 

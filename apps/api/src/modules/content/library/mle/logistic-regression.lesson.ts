@@ -268,6 +268,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'The model',
             title: 'Score, then probability',
+            animation: {
+              name: 'logreg-score-to-p',
+            },
             body: 'Logistic regression works in two steps. First a linear score, exactly as in linear regression: **z = w·x + b**. Then the sigmoid turns that score into a probability: **p = σ(z)**.',
             visual: {
               type: 'flow',
@@ -299,6 +302,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'Odds',
             title: 'Odds and log-odds',
+            animation: {
+              name: 'logreg-odds-scales',
+            },
             body: '**Odds** compare the chance of yes with the chance of no: p / (1 − p). The **log-odds**, or logit, is ln of the odds. In logistic regression the score z *is* the log-odds.',
             visual: {
               type: 'table',
@@ -412,6 +418,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'Scoring',
             title: 'Why not squared error',
+            animation: {
+              name: 'logreg-squared-vs-log',
+            },
             body: 'With a sigmoid inside, MSE becomes a bumpy surface, and it punishes a confident wrong answer too gently.',
             visual: {
               type: 'compare',
@@ -465,6 +474,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'Where it comes from',
             title: 'Maximum likelihood',
+            animation: {
+              name: 'logreg-likelihood-bars',
+            },
             body: 'The model gives each row a probability of what really happened. Multiply those ten probabilities: that is the **likelihood** of the data. Training picks the weights that make it largest.',
             visual: {
               type: 'flow',
@@ -480,6 +492,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'Training',
             title: 'Gradient of the log loss',
+            animation: {
+              name: 'logreg-gradient-pushes',
+            },
             body: 'Logistic regression has no normal equation, because of the sigmoid. The weights are found by **gradient descent**, and the gradient is simple.',
             visual: {
               type: 'icons',
@@ -637,6 +652,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'Four outcomes',
             title: 'The confusion matrix',
+            animation: {
+              name: 'logreg-confusion-drop',
+            },
             body: 'Every prediction lands in one of four boxes. At a threshold of 0.5, the ten students give 4 true positives, 4 true negatives, 1 false positive and 1 false negative.',
             visual: {
               type: 'table',
@@ -651,6 +669,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'Metrics',
             title: 'Accuracy, precision and recall',
+            animation: {
+              name: 'logreg-metric-boxes',
+            },
             body: 'Four scores come from those four counts.',
             visual: {
               type: 'table',
@@ -668,6 +689,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'Trade-off',
             title: 'Precision against recall',
+            animation: {
+              name: 'logreg-precision-recall',
+            },
             body: 'Move the threshold, and the two scores pull against each other.',
             visual: {
               type: 'table',
@@ -710,6 +734,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'Pitfall',
             title: 'Accuracy on imbalanced data',
+            animation: {
+              name: 'logreg-imbalance-grid',
+            },
             body: 'Suppose only 1 transaction in 100 is fraud. A model that always says "not fraud" is 99% accurate and useless: its recall is 0. With **imbalanced classes**, read precision, recall and F1, not accuracy.',
             visual: {
               type: 'stat',
@@ -722,6 +749,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'All thresholds',
             title: 'ROC curve and AUC',
+            animation: {
+              name: 'logreg-roc-pairs',
+            },
             body: 'The **ROC curve** plots recall against the false positive rate for every threshold at once. **AUC** is the area under it: the chance that a random positive gets a higher probability than a random negative.',
             visual: {
               type: 'icons',
@@ -822,6 +852,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'Definition',
             title: 'The decision boundary',
+            animation: {
+              name: 'logreg-boundary-point',
+            },
             body: 'The **decision boundary** is where the model switches from predicting 0 to predicting 1. At a threshold of 0.5 that is where z = 0. With one feature it is a single point: **x = −b / w** = 3.7219 / 0.6767 = 5.5 hours.',
             visual: {
               type: 'stat',
@@ -850,6 +883,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'Limit',
             title: 'Only straight boundaries',
+            animation: {
+              name: 'logreg-ring-features',
+            },
             visual: {
               type: 'compare',
               left: {
@@ -875,6 +911,9 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             kicker: 'More classes',
             title: 'Multiclass classification',
+            animation: {
+              name: 'logreg-softmax',
+            },
             body: 'With more than two classes there are two standard routes. **One-vs-rest** trains one yes-or-no model per class and picks the most confident. **Softmax** extends the sigmoid to give one probability per class, adding up to 1.',
             visual: {
               type: 'icons',
@@ -1455,7 +1494,7 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             title: 'Linear or logistic',
             front: 'What is the difference between linear regression and logistic regression?',
-            back: 'The main difference is the type of output.\n\nLinear regression predicts a continuous value, like a salary. Logistic regression predicts a probability, and we use it for classification, like pass or fail.\n\nLinear regression fits a straight line to the data. Logistic regression fits an S-shaped sigmoid curve, so the output always stays between 0 and 1.\n\nThe loss function is different. Linear regression uses mean squared error. Logistic regression uses log loss.\n\nThe evaluation is also different. For linear regression we use RMSE and R squared. For logistic regression we use accuracy, precision, recall and F1 score.',
+            back: 'The main difference is the type of output.\n\nLinear regression predicts a continuous value, like a salary. Logistic regression predicts a probability, and we use it for classification, like pass or fail.\n\nLinear regression fits a straight line to the data. Logistic regression fits an S-shaped sigmoid curve, so the output always stays between 0 and 1.\n\nThe loss function is different. Linear regression uses mean squared error. Logistic regression uses log loss.\n\nThe evaluation is also different. For linear regression we use RMSE and R squared. For logistic regression we use accuracy, precision, recall and F1 score.\n\nThe same split decides the task. If the question is "how much", it is regression. If it is "which class", it is classification.',
           },
           {
             title: 'Why "regression"',
@@ -1465,7 +1504,7 @@ export const LOGISTIC_REGRESSION_LESSON: LessonDocumentInput = {
           {
             title: 'The sigmoid',
             front: 'What is the sigmoid function?',
-            back: 'The sigmoid function converts any real number into a value between 0 and 1.\n\nThe formula is **σ(z) = 1 / (1 + e⁻ᶻ)**.\n\nWhen z is a large positive number, the output is close to 1. When z is a large negative number, the output is close to 0. When z is 0, the output is exactly 0.5.\n\nIts graph is an S-shaped curve.\n\nIn logistic regression we use it to convert the linear score into a probability. It is also used as an activation function in neural networks.',
+            back: 'The sigmoid function converts any real number into a value between 0 and 1.\n\nThe formula is **σ(z) = 1 / (1 + e⁻ᶻ)**.\n\nWhen z is a large positive number, the output is close to 1. When z is a large negative number, the output is close to 0. When z is 0, the output is exactly 0.5.\n\nIts graph is an S-shaped curve.\n\nIn logistic regression we use it to convert the linear score into a probability.',
           },
           {
             title: 'The loss function',

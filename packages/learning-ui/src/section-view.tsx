@@ -54,9 +54,11 @@ const WIDE_STAGE = new Set(['linreg-lab', 'linreg-multi', 'knn-lab', 'logreg-lab
 
 /**
  * True for a step that should get the full width of the window instead of a reading column:
- * a lab whose picture, controls and calculation are meant to be seen together.
+ * a lab whose picture, controls and calculation are meant to be seen together, and a slide deck,
+ * which puts what a slide says beside what it shows.
  */
 export function wantsWideStage(s: Pick<StudentSection, 'kind'> & { body: unknown }): boolean {
+  if (s.kind === 'SLIDES') return true;
   return s.kind === 'WIDGET' && WIDE_STAGE.has((s.body as { widget: string }).widget);
 }
 

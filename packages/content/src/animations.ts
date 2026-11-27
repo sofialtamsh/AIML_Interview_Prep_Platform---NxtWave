@@ -4,7 +4,14 @@
  * ships drawing code. Each description says what the animation shows: it guides authors and the
  * AI writer, and it is what screen readers announce.
  */
+import { KNN_ANIMATIONS } from './animations-knn';
+import { LINREG_ANIMATIONS } from './animations-linreg';
+import { LOGREG_ANIMATIONS } from './animations-logreg';
+
 export const ANIMATIONS = {
+  ...KNN_ANIMATIONS,
+  ...LINREG_ANIMATIONS,
+  ...LOGREG_ANIMATIONS,
   // Python
   'name-tags':
     'Variables are name tags: a and b point at the same list, so b.append(4) changes what a shows too.',
@@ -259,7 +266,7 @@ export const ANIMATIONS = {
   'line-vs-sigmoid':
     'Ten students at 0 (did not clear) or 1 (cleared), by hours of practice. A straight line fitted to them drops below 0 on the left and climbs above 1 on the right, to 1.48 at 14 hours, which no probability can be. The S-shaped sigmoid curve replaces it and stays between 0 and 1 everywhere, crossing 0.5 at 5.5 hours.',
   'log-loss-curve':
-    'The log loss for a row whose true label is 1, as the predicted probability goes from 0 to 1. At 0.9 the loss is 0.105, at 0.5 it is 0.693, and at 0.1 it is 2.303. The curve rises without limit as the probability nears 0: a confident wrong answer costs the most.',
+    'The log loss for a row whose true label is 1, as the predicted probability goes from 0 to 1. At 0.9 the loss is 0.105, at 0.5 it is 0.693, and at 0.2 it is 1.609. The curve rises without limit as the probability nears 0: a confident wrong answer costs the most.',
   'threshold-tradeoff':
     'The ten students lined up by predicted probability, from 0.045 to 0.955. A threshold slides from 0.3 to 0.5 to 0.7. At 0.3 there are 2 false alarms and 1 miss; at 0.5 there is 1 of each; at 0.7 there is 1 false alarm and 2 misses. A lower threshold catches more positives and raises more false alarms.',
   // NumPy: arrays and vectorization

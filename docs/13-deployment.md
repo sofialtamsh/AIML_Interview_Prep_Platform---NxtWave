@@ -32,6 +32,21 @@ to a minute to wake, so the first student each morning waits; a free Render data
 after 30 days; Neon's free database allows 100 compute hours a month, and the job queue checks the
 database every few seconds, which uses that up.
 
+## Free plan (what runs today)
+
+`render.yaml` is set to Render's free plans, so the Blueprint costs nothing; Render may still ask
+for a card, in which case create the two pieces by hand (**New → Postgres**, then **New → Web
+Service**) with the same values. What the free plans change:
+
+- The server sleeps after 15 minutes without visitors; the next visitor waits up to a minute.
+- The free database is deleted 30 days after it is created. Upgrade it in the dashboard before then
+  (about $6 a month); the data stays.
+- No pre-deploy step: migrations run in the start command,
+  `(cd apps/api && npx prisma migrate deploy) && node apps/api/dist/main.js`.
+- No Shell: create the first admin from your computer against the **External Database URL**
+  (`DATABASE_URL="<url>" ADMIN_APP_URL="<admin address>" pnpm --filter @app/api admin:create --email … --name … --password …`).
+- Ports 465 and 587 are blocked, so email uses Brevo's port **2525**.
+
 ## 0. Before you push: make the repository private
 
 `github.com/sofialtamsh/AIML_Interview_Prep_Platform---NxtWave` is **public** today. The work since

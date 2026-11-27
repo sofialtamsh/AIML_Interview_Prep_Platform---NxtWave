@@ -145,7 +145,7 @@ function Quiz({ s, draw }: { s: CheckSection; draw: number }) {
                   aria-current={i === at ? 'step' : undefined}
                   aria-label={`Question ${i + 1}${done ? (ok ? ': correct' : ': not correct') : ''}`}
                   className={cn(
-                    'grid size-6 place-items-center rounded-full border font-mono text-[11px] font-bold transition',
+                    'grid size-6 place-items-center rounded-full border font-mono text-[11px] font-bold transition pointer-coarse:size-9 pointer-coarse:text-[13px]',
                     done
                       ? ok
                         ? 'border-ok bg-ok-bg text-ok'

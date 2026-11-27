@@ -85,6 +85,9 @@ export async function buildApp(ctx: AppContext) {
 
   app.addHook('onSend', async (req, reply) => {
     reply.header('x-request-id', req.id);
+    // Answers are per student. The apps reach the API through Vercel's CDN, which caches what an
+    // origin allows, so say plainly that nothing here may be stored there.
+    if (!reply.hasHeader('cache-control')) reply.header('cache-control', 'private, no-store');
   });
 
   if (ctx.env.NODE_ENV !== 'production') {

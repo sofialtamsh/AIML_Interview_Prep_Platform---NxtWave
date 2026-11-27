@@ -4,8 +4,9 @@
  *
  * Evidence (Hiring Intelligence, ML/AI families, Jan–Oct 2026; internal only, never quoted to
  * students): explain KNN in detail (idea, how neighbours are picked, the role of K, how predictions
- * are made), its use cases, why it is non-parametric, KNN vs K-Means, KNN vs SVM, KNN for missing
- * values, and "why KNN and not Random Forest in your project". One bar for every package, so every
+ * are made), its use cases, why it is non-parametric, KNN for missing values, and "why KNN in your
+ * project". KNN vs K-Means, KNN vs SVM and KNN vs Random Forest are asked too, but those units come
+ * later: each comparison belongs in the later unit, never here. One bar for every package, so every
  * section is depth 1. Lab numbers follow scikit-learn 1.9 (checked on millions of predictions; the only differences are
  * exact distance ties at the K-th neighbour, which the lab flags, as scikit-learn's pick there
  * depends on row order); the
@@ -280,6 +281,10 @@ export const K_NEAREST_NEIGHBORS_LESSON: LessonDocumentInput = {
               ],
             },
             note: 'A linear model keeps a few weights and throws the data away. KNN keeps every example, so the model grows with the data.',
+            animation: {
+              name: 'knn-lazy-fit',
+              caption: 'Fitting only stores the films; each prediction measures, sorts and votes',
+            },
           },
           {
             kicker: 'Cost',
@@ -305,6 +310,9 @@ export const K_NEAREST_NEIGHBORS_LESSON: LessonDocumentInput = {
               better: 'none',
             },
             note: 'A KD-tree or ball tree splits the space so a query skips far regions: about log N checks with few features. With many, use an approximate index, as vector databases do.',
+            animation: {
+              name: 'knn-query-cost',
+            },
           },
           {
             kicker: 'Regression',
@@ -563,7 +571,7 @@ export const K_NEAREST_NEIGHBORS_LESSON: LessonDocumentInput = {
             title: 'The curse of dimensionality',
             body: 'With many features, points spread out, and the nearest point is almost as far as the farthest. "Nearest" then means little. Below, the ratio of nearest to farthest distance climbs from 0.01 with 2 features to 0.9 with 1,000.',
             visual: { type: 'code', code: CURSE, output: '2 0.01\n10 0.22\n100 0.72\n1000 0.9' },
-            note: 'Fixes: drop irrelevant features, reduce dimensions with PCA, or switch to a model that weighs features, such as a tree ensemble.',
+            note: 'Fixes: keep only the features that matter, or use a model that learns a weight per feature, such as logistic regression.',
             narration:
               'We scatter 1,000 random points and one query point, first with 2 features, then 10, 100 and 1,000. Each time we divide the nearest distance by the farthest. With 2 features the nearest point is more than 100 times closer than the farthest. With 1,000 features the ratio is 0.9: every point is almost equally far away.',
           },
@@ -592,36 +600,19 @@ export const K_NEAREST_NEIGHBORS_LESSON: LessonDocumentInput = {
               ],
             },
             note: 'For imbalance, weight the votes or balance the classes by resampling. Turn categories into 0 and 1 columns, or count mismatches with Hamming distance. Fill missing values first.',
+            animation: {
+              name: 'knn-missing-value',
+              caption: 'Missing values: the gap decides the vote, so fill it first',
+            },
           },
           {
             kicker: 'Uses',
             title: 'Where KNN earns its place',
-            body: 'KNN is a strong **baseline** on small, clean data with few features. Nearest-neighbour search needs no labels: it powers recommendations, anomaly detection and semantic search over embeddings by cosine similarity. `KNNImputer` fills a missing value from the most similar rows.',
-          },
-          {
-            kicker: 'Compare',
-            title: 'KNN is not K-Means',
-            visual: {
-              type: 'compare',
-              left: {
-                title: 'KNN',
-                items: [
-                  'Supervised: needs labels',
-                  'K = neighbours that vote',
-                  'No training; predicts a class or a number',
-                ],
-              },
-              right: {
-                title: 'K-Means',
-                items: [
-                  'Unsupervised: no labels',
-                  'K = number of clusters',
-                  'Trains by moving cluster centres',
-                ],
-              },
-              better: 'none',
+            body: 'KNN is a strong **baseline** on small, clean data with few features. Nearest-neighbour search needs no labels: it powers recommendations, anomaly detection and similarity search. `KNNImputer` fills a missing value from the most similar rows.',
+            animation: {
+              name: 'knn-similar-films',
+              caption: 'Real use: similar films, products and songs, found with no labels',
             },
-            note: 'Have labels and want a prediction? KNN. No labels and want groups? K-Means.',
           },
           {
             kicker: 'Try it',
@@ -632,10 +623,10 @@ export const K_NEAREST_NEIGHBORS_LESSON: LessonDocumentInput = {
                 'You have 2 million rows and 300 features, and need predictions in milliseconds. What do you try first?',
               options: [
                 {
-                  text: 'A model trained once, such as logistic regression or a tree ensemble',
+                  text: 'A model trained once, such as logistic regression',
                   correct: true,
                   feedback:
-                    'Right. It predicts from learned weights or splits, with no scan of the stored data.',
+                    'Right. It predicts from learned weights, with no scan of the stored data.',
                 },
                 {
                   text: 'KNN with K = 1',
@@ -815,23 +806,6 @@ export const K_NEAREST_NEIGHBORS_LESSON: LessonDocumentInput = {
             answer: { correct: ['a'] },
             explanation:
               'Distances add raw differences, and salary differences are thousands of times larger. Scale first.',
-          },
-          {
-            key: 'kmeans',
-            type: 'mcq',
-            prompt: 'Which statement about KNN and K-Means is true?',
-            options: [
-              {
-                id: 'a',
-                text: 'KNN needs labels and K-Means does not',
-              },
-              { id: 'b', text: 'Both are unsupervised clustering methods' },
-              { id: 'c', text: 'In both, K is the number of neighbours' },
-              { id: 'd', text: 'K-Means needs labels and KNN does not' },
-            ],
-            answer: { correct: ['a'] },
-            explanation:
-              'KNN is supervised and K-Means is unsupervised. In KNN, K is how many neighbours vote. In K-Means, K is how many clusters to form.',
           },
           {
             key: 'euclidean',
@@ -1114,17 +1088,7 @@ export const K_NEAREST_NEIGHBORS_LESSON: LessonDocumentInput = {
           {
             title: 'Cost and many dimensions',
             front: 'KNN is slow on your large, high-dimensional dataset. Why, and what do you do?',
-            back: 'Each prediction measures the distance to every stored point: about N × d operations. With many features, distances also become nearly equal, so neighbours carry little meaning. Reduce dimensions with feature selection or PCA. Use a KD-tree or ball tree for few features, or an approximate nearest-neighbour index for many.',
-          },
-          {
-            title: 'KNN vs K-Means',
-            front: 'What is the difference between KNN and K-Means?',
-            back: 'KNN is supervised: it needs labels and predicts a class or number from the K nearest labelled points, with no training. K-Means is unsupervised: it has no labels and groups points into K clusters by moving cluster centres. In KNN, K counts neighbours; in K-Means, K counts clusters.',
-          },
-          {
-            title: 'KNN vs SVM',
-            front: 'How does KNN differ from SVM?',
-            back: 'Both are supervised and both need scaled features. KNN keeps all the data and decides by a local vote, so training is instant and prediction is slow. SVM learns one boundary with the widest margin and keeps only the support vectors, so training costs more and prediction is fast.',
+            back: 'Each prediction measures the distance to every stored point: about N × d operations. With many features, distances also become nearly equal, so neighbours carry little meaning. Keep only the features that matter. Use a KD-tree or ball tree for few features, or an approximate nearest-neighbour index for many.',
           },
           {
             title: 'KNN for missing values',
@@ -1133,8 +1097,8 @@ export const K_NEAREST_NEIGHBORS_LESSON: LessonDocumentInput = {
           },
           {
             title: 'Why KNN in your project',
-            front: 'Why did you choose KNN and not Random Forest?',
-            back: 'A strong answer cites evidence. KNN suits small, clean data with a few scaled numeric features, where similar inputs share labels. It also explains a prediction by showing the neighbours. Say you compared both with cross-validation and KNN matched or beat the forest. Admit that a forest handles many features and mixed types better.',
+            front: 'Why did you choose KNN for your project?',
+            back: 'A strong answer cites evidence. KNN suits small, clean data with a few scaled numeric features, where similar inputs share labels. It also explains a prediction by showing the neighbours. Say you compared it with a simple baseline such as logistic regression, using cross-validation, and KNN matched or beat it. Admit its limits: predictions slow down as the data grows, and many features blur the distances.',
           },
         ],
       },

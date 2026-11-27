@@ -347,7 +347,7 @@ function FlipCards({ cards }: { cards: Card[] }) {
                 allOpen ? new Set() : new Set(cards.map((_, i) => i).filter((i) => cards[i]?.back)),
               )
             }
-            className="font-semibold text-brand hover:underline"
+            className="font-semibold text-brand hover:underline pointer-coarse:py-2"
           >
             {allOpen ? 'Close all' : 'Open all'}
           </button>

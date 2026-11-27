@@ -465,7 +465,7 @@ export function PlaygroundView({ s }: { s: Of<'PLAYGROUND'> }) {
               <button
                 type="button"
                 onClick={() => setTestsShown(true)}
-                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-[#8a9bb5] hover:bg-[#1a2436] hover:text-[#c9d4e5]"
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-[#8a9bb5] hover:bg-[#1a2436] hover:text-[#c9d4e5] pointer-coarse:px-2 pointer-coarse:py-2.5 pointer-coarse:text-[12px]"
               >
                 <Lightbulb className="size-3" aria-hidden /> Show what the tests expect
               </button>

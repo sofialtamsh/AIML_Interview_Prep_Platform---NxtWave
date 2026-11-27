@@ -8,362 +8,32 @@
  */
 import { ANIMATIONS, type AnimationName } from '@app/content';
 import { cn } from '@app/ui';
-import { createContext, type ReactNode, useContext, useEffect, useId, useState } from 'react';
+import { type ReactNode, useContext, useId } from 'react';
+import { KNN_LIBRARY } from './anim/knn';
+import { LINREG_LIBRARY } from './anim/linreg';
+import { LOGREG_LIBRARY } from './anim/logreg';
+import {
+  Anim,
+  AnimCtx,
+  Arrow,
+  type BOX,
+  Box,
+  Chip,
+  drawKeys,
+  FADE,
+  type Keys,
+  Markers,
+  Move,
+  type Pt,
+  Show,
+  Spin,
+  T,
+  TONE,
+  Travel,
+  useReducedMotion,
+} from './anim-kit';
 import { polyFit, splitHalves } from './linreg-multi';
 import { sigmoid } from './logreg';
-
-// ───────────── Plumbing ─────────────
-
-interface Ctx {
-  still: boolean;
-  dur: number;
-  uid: string;
-}
-const AnimCtx = createContext<Ctx>({ still: true, dur: 8, uid: 'anim' });
-
-function useReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const q = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-    if (!q) return;
-    const on = () => setReduced(q.matches);
-    on();
-    q.addEventListener?.('change', on);
-    return () => q.removeEventListener?.('change', on);
-  }, []);
-  return reduced;
-}
-
-/** Keyframes as [time, value] pairs; time runs 0–1 over one loop. */
-type Keys = ReadonlyArray<readonly [number, number | string]>;
-const FADE = 0.025;
-
-function keyAttrs(keys: Keys, discrete: boolean) {
-  const ks = [...keys];
-  const last = ks[ks.length - 1];
-  if (!discrete && last && last[0] < 1) ks.push([1, last[1]]);
-  return {
-    values: ks.map((k) => k[1]).join(';'),
-    keyTimes: ks.map((k) => Number(k[0].toFixed(4))).join(';'),
-  };
-}
-
-/** Animates one attribute of its parent element over the loop. */
-function Anim({ attr, keys, discrete = false }: { attr: string; keys: Keys; discrete?: boolean }) {
-  const { still, dur } = useContext(AnimCtx);
-  if (still) return null;
-  return (
-    <animate
-      attributeName={attr}
-      dur={`${dur}s`}
-      repeatCount="indefinite"
-      calcMode={discrete ? 'discrete' : 'linear'}
-      {...keyAttrs(keys, discrete)}
-    />
-  );
-}
-
-/** Shown from `from` to `to` (fractions of the loop); `final` says whether the still frame shows it. */
-function Show({
-  from = 0,
-  to,
-  final = true,
-  children,
-}: {
-  from?: number;
-  to?: number;
-  final?: boolean;
-  children: ReactNode;
-}) {
-  const keys: Array<readonly [number, number]> =
-    from <= 0
-      ? [[0, 1]]
-      : [
-          [0, 0],
-          [from, 0],
-          [Math.min(from + FADE, 1), 1],
-        ];
-  if (to !== undefined && to < 1) keys.push([to, 1], [Math.min(to + FADE, 1), 0]);
-  return (
-    <g opacity={final ? 1 : 0}>
-      <Anim attr="opacity" keys={keys} />
-      {children}
-    </g>
-  );
-}
-
-type Pt = readonly [number, number];
-
-/** Moves its children through [time, [dx, dy]] keyframes; `at` is the still-frame offset. */
-function Move({
-  keys,
-  at = [0, 0],
-  discrete = false,
-  children,
-}: {
-  keys: ReadonlyArray<readonly [number, Pt]>;
-  at?: Pt;
-  discrete?: boolean;
-  children: ReactNode;
-}) {
-  const { still, dur } = useContext(AnimCtx);
-  return (
-    <g transform={`translate(${at[0]} ${at[1]})`}>
-      {!still && (
-        <animateTransform
-          attributeName="transform"
-          type="translate"
-          dur={`${dur}s`}
-          repeatCount="indefinite"
-          calcMode={discrete ? 'discrete' : 'linear'}
-          {...keyAttrs(
-            keys.map(([t, [x, y]]) => [t, `${x} ${y}`] as const),
-            discrete,
-          )}
-        />
-      )}
-      {children}
-    </g>
-  );
-}
-
-function Spin({
-  cx,
-  cy,
-  seconds = 3,
-  children,
-}: {
-  cx: number;
-  cy: number;
-  seconds?: number;
-  children: ReactNode;
-}) {
-  const { still } = useContext(AnimCtx);
-  return (
-    <g>
-      {!still && (
-        <animateTransform
-          attributeName="transform"
-          type="rotate"
-          values={`0 ${cx} ${cy};360 ${cx} ${cy}`}
-          dur={`${seconds}s`}
-          repeatCount="indefinite"
-        />
-      )}
-      {children}
-    </g>
-  );
-}
-
-/** A dot that travels along a path again and again (hidden in the still frame). */
-function Travel({
-  path,
-  begin = 0,
-  seconds = 2,
-  className = 'fill-g1',
-  r = 3,
-}: {
-  path: string;
-  begin?: number;
-  seconds?: number;
-  className?: string;
-  r?: number;
-}) {
-  const { still } = useContext(AnimCtx);
-  if (still) return null;
-  return (
-    <circle r={r} className={className}>
-      <animateMotion dur={`${seconds}s`} begin={`${begin}s`} repeatCount="indefinite" path={path} />
-    </circle>
-  );
-}
-
-/** Draw a stroke from nothing to whole between two loop times (use on a path with pathLength 1). */
-const drawKeys = (from: number, to: number): Keys => [
-  [0, 1],
-  [from, 1],
-  [to, 0],
-];
-
-const TONE = {
-  ink: 'fill-ink',
-  muted: 'fill-muted',
-  brand: 'fill-brand',
-  ok: 'fill-ok',
-  bad: 'fill-bad',
-  warn: 'fill-warn',
-  surface: 'fill-surface',
-  g1: 'fill-g1',
-  g2: 'fill-g2',
-  g3: 'fill-g3',
-} as const;
-
-function T({
-  x,
-  y,
-  children,
-  size = 10,
-  tone = 'muted',
-  anchor = 'middle',
-  mono = false,
-  bold = false,
-}: {
-  x: number;
-  y: number;
-  children: ReactNode;
-  size?: number;
-  tone?: keyof typeof TONE;
-  anchor?: 'start' | 'middle' | 'end';
-  mono?: boolean;
-  bold?: boolean;
-}) {
-  return (
-    <text
-      x={x}
-      y={y}
-      fontSize={size}
-      textAnchor={anchor}
-      fontWeight={bold ? 700 : 500}
-      className={cn(TONE[tone], mono && 'font-mono')}
-    >
-      {children}
-    </text>
-  );
-}
-
-const BOX = {
-  plain: 'fill-surface stroke-line-2',
-  soft: 'fill-surface-2 stroke-line',
-  brand: 'fill-brand-soft stroke-brand',
-  ok: 'fill-ok-bg stroke-ok',
-  bad: 'fill-bad-bg stroke-bad',
-  warn: 'fill-warn-bg stroke-warn',
-  ink: 'fill-ink stroke-ink',
-  ring: 'fill-none stroke-brand',
-  ringOk: 'fill-none stroke-ok',
-  ringBad: 'fill-none stroke-bad',
-} as const;
-
-function Box({
-  x,
-  y,
-  w,
-  h,
-  r = 8,
-  tone = 'plain',
-  width = 1.25,
-  dashed = false,
-}: {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  r?: number;
-  tone?: keyof typeof BOX;
-  width?: number;
-  dashed?: boolean;
-}) {
-  return (
-    <rect
-      x={x}
-      y={y}
-      width={w}
-      height={h}
-      rx={r}
-      strokeWidth={width}
-      strokeDasharray={dashed ? '5 4' : undefined}
-      className={BOX[tone]}
-    />
-  );
-}
-
-/** A labelled chip: a small box with centred mono text. */
-function Chip({
-  x,
-  y,
-  w,
-  h = 22,
-  label,
-  tone = 'plain',
-  text = 'ink',
-  size = 10.5,
-}: {
-  x: number;
-  y: number;
-  w: number;
-  h?: number;
-  label: string;
-  tone?: keyof typeof BOX;
-  text?: keyof typeof TONE;
-  size?: number;
-}) {
-  return (
-    <g>
-      <Box x={x} y={y} w={w} h={h} r={6} tone={tone} />
-      <T x={x + w / 2} y={y + h / 2 + size * 0.36} size={size} tone={text} mono>
-        {label}
-      </T>
-    </g>
-  );
-}
-
-function Arrow({
-  x1,
-  y1,
-  x2,
-  y2,
-  tone = 'muted',
-  width = 1.5,
-}: {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  tone?: 'muted' | 'brand' | 'bad' | 'ok';
-  width?: number;
-}) {
-  const { uid } = useContext(AnimCtx);
-  const stroke = {
-    muted: 'stroke-muted',
-    brand: 'stroke-brand',
-    bad: 'stroke-bad',
-    ok: 'stroke-ok',
-  }[tone];
-  return (
-    <line
-      x1={x1}
-      y1={y1}
-      x2={x2}
-      y2={y2}
-      strokeWidth={width}
-      className={stroke}
-      markerEnd={`url(#${uid}-${tone})`}
-    />
-  );
-}
-
-function Markers() {
-  const { uid } = useContext(AnimCtx);
-  const tones = { muted: 'fill-muted', brand: 'fill-brand', bad: 'fill-bad', ok: 'fill-ok' };
-  return (
-    <defs>
-      {Object.entries(tones).map(([tone, cls]) => (
-        <marker
-          key={tone}
-          id={`${uid}-${tone}`}
-          viewBox="0 0 10 10"
-          refX="8"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto-start-reverse"
-        >
-          <path d="M0 0 L10 5 L0 10 z" className={cls} />
-        </marker>
-      ))}
-    </defs>
-  );
-}
 
 // ───────────── Python ─────────────
 
@@ -10748,7 +10418,7 @@ function LogLossCurve() {
     [
       { prob: 0.9, tone: 'ok', from: 0.3, note: 'confident and right' },
       { prob: 0.5, tone: 'warn', from: 0.48, note: 'a coin toss' },
-      { prob: 0.1, tone: 'bad', from: 0.66, note: 'confident and wrong' },
+      { prob: 0.2, tone: 'bad', from: 0.66, note: 'confident and wrong' },
     ] as const
   ).map((m) => ({ ...m, loss: -Math.log(m.prob) }));
   return (
@@ -10914,6 +10584,9 @@ function ThresholdTradeoff() {
 }
 
 const LIBRARY: Record<AnimationName, { viewBox: string; dur: number; Draw: () => ReactNode }> = {
+  ...KNN_LIBRARY,
+  ...LINREG_LIBRARY,
+  ...LOGREG_LIBRARY,
   'name-tags': { viewBox: '0 0 320 176', dur: 10, Draw: NameTags },
   'list-vs-tuple': { viewBox: '0 0 320 180', dur: 9, Draw: ListVsTuple },
   'set-dedupe': { viewBox: '0 0 320 180', dur: 10, Draw: SetDedupe },
@@ -11072,11 +10745,13 @@ export function AnimationView({
       <div className="rounded-2xl border border-line bg-surface p-3 shadow-soft">
         <svg
           viewBox={viewBox}
-          // At most 260px tall. A host with less room sets --fig-h (slide decks do, from the
-          // frame's height), and the picture shrinks to fit instead of pushing content out.
-          className="mx-auto block h-auto max-h-[min(260px,var(--fig-h,260px))] w-full"
+          // 260px tall at most, unless the host says how much room it has with --fig-h (slide
+          // decks do, from the height the window leaves them): then the picture grows or
+          // shrinks to that instead of pushing content out.
+          className="mx-auto block h-auto max-h-[var(--fig-h,260px)] w-full"
           role="img"
           aria-label={ANIMATIONS[name]}
+          data-anim
         >
           <AnimCtx.Provider value={{ still: reduced, dur, uid }}>
             <Markers />

@@ -1,27 +1,26 @@
 /**
- * A PPT-style deck: one idea per slide, a picture on most slides, bullets that build in, and
- * small try-it moments, so a student gets comfortable with the topic before the deeper steps.
- * Every slide shares one fixed frame, so the deck never changes size and the controls stay
- * exactly where they are while you move through it.
+ * A slide deck: one idea per slide, a picture on most slides, bullets that build in, and small
+ * try-it moments, so a student gets comfortable with the topic before the deeper steps.
  *
- * Responsive rules: the frame is sized to the room the window leaves it, and it is a CSS size
- * container. Everything on a slide lays itself out from the frame's own width and height (the
- * `@…:` variants and `cqw` / `cqh` units below), never from the window's, so a deck reads the same
- * in a narrow column, beside a sidebar, on a phone and in full screen.
+ * A deck is laid out like a lab, on the whole page instead of in a box: what a slide says sits in
+ * one card on the left, with the deck's progress at its top, and what it shows (a moving picture,
+ * a code sample, a table, a try-it) takes the rest of the width. The lesson's own step bar turns
+ * the slides, so "next" is always the same button in the same place.
+ *
+ * Responsive rules: the deck is a CSS container and lays itself out from its own width (the
+ * `@…:` variants), never from the window's, so it reads the same beside a list of steps, in a
+ * preview column and on a phone, where it becomes one column in reading order. A slide taller
+ * than the window scrolls with the page while its text stays pinned.
  */
 import { type StudentSection, shuffleStable } from '@app/content';
 import { cn } from '@app/ui';
 import {
   ArrowRight,
-  Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
   CircleX,
   Lightbulb,
-  Maximize2,
-  Minimize2,
   Pause,
   Play,
   Quote,
@@ -35,6 +34,7 @@ import {
   type PointerEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -50,10 +50,11 @@ import {
   RunMark,
   useRunner,
 } from '../code';
-import { useNarration, useNarratorVoice } from '../context';
+import { useNarration, useNarratorVoice, useOptionalRuntime } from '../context';
 import { narrationChunks, narrationOf, slideMillis } from '../deck-play';
 import { iconOf } from '../icons';
 import { Rich } from '../rich';
+import { type TableChart, tableChart } from '../table-chart';
 import { useStepFlow } from './lab-kit';
 
 type Deck = Extract<StudentSection, { kind: 'SLIDES' }>;
@@ -136,12 +137,18 @@ export function SlidesView({ s }: { s: Deck }) {
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState<'from-right' | 'from-left'>('from-right');
   const [seen, setSeen] = useState(() => new Set([0]));
-  const [full, setFull] = useState(false);
-  const stage = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLElement>(null);
+  const grid = useRef<HTMLDivElement>(null);
+  const card = useRef<HTMLDivElement>(null);
+  const text = useRef<HTMLDivElement>(null);
+  const figures = useRef<HTMLDivElement>(null);
   const start = useRef<number | null>(null);
   const narrator = useNarratorVoice();
   // The read-aloud voice is offered only where the host turns it on (LessonRuntime.narration).
   const narration = useNarration();
+  // A lesson's step bar turns the slides with its own button. Where there is no bar (an admin
+  // preview), the deck draws its own two.
+  const hostTurns = Boolean(useOptionalRuntime()?.reportFlow);
   const last = slides.length - 1;
 
   const go = (next: number) => {
@@ -151,6 +158,10 @@ export function SlidesView({ s }: { s: Deck }) {
     setIndex(n);
     setSeen((prev) => new Set(prev).add(n));
     setYourTurn(false);
+    // A slide is read from its top: after scrolling down a long one, bring the deck's top back.
+    const el = root.current;
+    if (el && typeof el.scrollIntoView === 'function' && el.getBoundingClientRect().top < 0)
+      el.scrollIntoView({ block: 'start' });
   };
   // The lesson's own "next" button turns the slides before it leaves the deck, so pressing it
   // on the first slide never skips the rest.
@@ -159,26 +170,9 @@ export function SlidesView({ s }: { s: Deck }) {
     next: 'Next slide',
   });
 
-  // Full screen: the browser API where available, a fixed overlay otherwise.
-  useEffect(() => {
-    const on = () => setFull(Boolean(document.fullscreenElement));
-    document.addEventListener('fullscreenchange', on);
-    return () => document.removeEventListener('fullscreenchange', on);
-  }, []);
-  const toggleFull = async () => {
-    const el = stage.current?.parentElement;
-    if (!el) return;
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else if (el.requestFullscreen) await el.requestFullscreen();
-      else setFull((f) => !f);
-    } catch {
-      setFull((f) => !f);
-    }
-  };
-
-  // Play mode: each slide stays up for its reading time (or while the device voice reads it),
-  // then the next one glides in. It stops at a try-it, so the student does it, and at the end.
+  // Play mode, offered with narration only: each slide stays up for its reading time (or while
+  // the device voice reads it), then the next one comes in. It stops at a try-it, so the student
+  // does it, and at the end.
   const [playing, setPlaying] = useState(false);
   const [voice, setVoice] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -250,7 +244,7 @@ export function SlidesView({ s }: { s: Deck }) {
     setPlaying(true);
   };
 
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     const t = e.target as HTMLElement;
     if (t.closest('textarea, input')) return;
     if (e.key === 'ArrowRight') {
@@ -261,12 +255,14 @@ export function SlidesView({ s }: { s: Deck }) {
       go(index - 1);
     }
   };
-  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+  // A sideways swipe turns the slide. Touch and pen only: a mouse drag is how text is selected.
+  const onPointerDown = (e: PointerEvent<HTMLElement>) => {
+    if (e.pointerType === 'mouse') return;
     if ((e.target as HTMLElement).closest('button, a, textarea, input, pre, [role="region"]'))
       return;
     start.current = e.clientX;
   };
-  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+  const onPointerUp = (e: PointerEvent<HTMLElement>) => {
     if (start.current === null) return;
     const dx = e.clientX - start.current;
     start.current = null;
@@ -274,414 +270,527 @@ export function SlidesView({ s }: { s: Deck }) {
     else if (dx >= 50) go(index - 1);
   };
 
-  // A deck is one size throughout, so the controls never move: that size is its tallest slide,
-  // capped by the room the page has. Only ever growing keeps it from oscillating, because a
-  // narrower frame can wrap text onto another line.
-  const [tallest, setTallest] = useState(0);
-  const reportHeight = useCallback(
-    (px: number) => setTallest((was) => (px > was + 1 ? px : was)),
-    [],
-  );
+  // A slide with little on it is enlarged until it fills the height the window leaves this step,
+  // the way a slide fills a screen, up to MAX_FIT; a full one stays as it is. Only what the slide
+  // says and shows is enlarged: the card's header keeps its size, so it never jumps between
+  // slides. Heights are read from the card and the figure column, which are not zoomed
+  // themselves, so they are real pixels whatever a browser reports for a zoomed element.
+  // How often the slide on screen has fitted itself. A slide that keeps doing so (something in it
+  // reacts to its own size) stops being enlarged, so it settles instead of pulsing.
+  const fitRuns = useRef({ slide: -1, runs: 0 });
+  // The deck's size when it last fitted itself, so its own result does not count as a change.
+  const fitted = useRef('');
+  const sizeNow = useCallback(() => {
+    const el = root.current;
+    const room = el ? getComputedStyle(el).getPropertyValue('--lesson-room') : '';
+    return `${el?.offsetWidth}|${card.current?.offsetHeight}|${figures.current?.offsetHeight}|${room}|${indexRef.current}`;
+  }, []);
+  const fitSlide = useCallback(() => {
+    const el = root.current;
+    const g = grid.current;
+    const c = card.current;
+    const t = text.current;
+    const f = figures.current;
+    if (!el || !g || !c || !t || !f) return;
+    const fig = f.querySelector<HTMLElement>(':scope > .is-active');
+    for (const other of f.children) {
+      const o = other as HTMLElement;
+      o.style.removeProperty('--fig-h');
+      if (o !== fig) o.style.zoom = '';
+    }
+    const set = (z: number) => {
+      const v = z === 1 ? '' : z.toFixed(3);
+      t.style.zoom = v;
+      if (fig) fig.style.zoom = v;
+    };
+    const before = Number(t.style.zoom) || 1;
+    set(1);
+    const count = fitRuns.current;
+    if (count.slide !== indexRef.current) {
+      count.slide = indexRef.current;
+      count.runs = 0;
+    }
+    count.runs += 1;
+    // A picture drawn from the slide's own table is an extra: it shows only where it fits.
+    const extras = fig?.querySelectorAll<HTMLElement>('[data-extra]') ?? [];
+    for (const x of extras) x.style.display = '';
+    // The host's figure for the room, less the breathing space the page keeps above its step bar.
+    const room = Number.parseFloat(getComputedStyle(el).getPropertyValue('--lesson-room')) - 28;
+    const twoUp = getComputedStyle(g).gridTemplateColumns.trim().split(/\s+/).length > 1;
+    // One column (a phone) scrolls with the page, and a host that gives no room has none to fill.
+    if (!twoUp || !Number.isFinite(room) || !canZoom()) return;
+    const tall = () => Math.max(c.scrollHeight, f.offsetHeight);
+    // How much wider than its box the widest sideways scroller is (code, a table): 1 when all fit.
+    const crowd = () => {
+      let worst = 1;
+      for (const box of fig?.querySelectorAll<HTMLElement>('pre, .overflow-x-auto') ?? [])
+        if (box.clientWidth > 0) worst = Math.max(worst, box.scrollWidth / box.clientWidth);
+      return worst;
+    };
+    const fits = () => tall() <= room + 1 && crowd() <= 1.005;
+    if (tall() > room + 1) for (const x of extras) x.style.display = 'none';
+    // A moving picture takes the height the rest of its column leaves it, so a slide with a
+    // picture fills the room with the picture, never with bigger type. Its width still caps it.
+    const art = fig?.querySelector<SVGElement>('svg[data-anim]');
+    if (fig && art) {
+      const setH = (px: number) => fig.style.setProperty('--fig-h', `${Math.round(px)}px`);
+      // Layout sizes, never screen boxes: a slide's entrance animation scales it for a moment, and
+      // a measurement taken then would size the picture for a frame that is about to change.
+      const svgH = art.clientHeight;
+      // Stacked, everything but the picture itself is "the rest". Paired, the rest is what is
+      // outside its row (the note), plus the picture's own frame and caption.
+      const pair = art.closest<HTMLElement>('[data-pair]');
+      const twoUpRow =
+        pair && getComputedStyle(pair).gridTemplateColumns.trim().split(/\s+/).length > 1;
+      const box = art.closest('figure');
+      const chrome = twoUpRow && box ? (box as HTMLElement).offsetHeight - svgH : 0;
+      const row = twoUpRow && pair ? pair.offsetHeight : svgH;
+      let give = Math.max(160, room - (f.offsetHeight - row) - chrome - 2);
+      setH(give);
+      // The first guess can be over where text re-wraps beside it: take the overflow back, but
+      // only while it is the picture that overflows (a taller visual beside it is not helped).
+      for (let i = 0; i < 3; i++) {
+        const over = f.offsetHeight - room;
+        const less = Math.max(160, give - over);
+        if (over <= 1 || less === give) break;
+        setH(less);
+        if (f.offsetHeight - room >= over - 1) {
+          setH(give);
+          break;
+        }
+        give = less;
+      }
+    }
+    const natural = tall();
+    if (natural >= room * 0.9 || crowd() > 1.005 || count.runs > 12) return;
+    let z = Math.min(MAX_FIT, room / natural);
+    // Enlarged text wraps onto more lines and long code lines stop fitting, so the first guess
+    // is too big: come down until the slide fits the room both ways.
+    for (let i = 0; i < 6 && z > 1.03; i++) {
+      set(z);
+      const h = tall();
+      const w = crowd();
+      if (h > room + 1) z *= (room / h) * 0.99;
+      else if (w > 1.005) z /= w * 1.01;
+      else break;
+    }
+    if (z <= 1.03) return set(1);
+    // Keep the size the slide already had when the new one is all but the same: no shimmer.
+    if (before > 1 && Math.abs(z - before) < 0.04) {
+      set(before);
+      if (fits()) return;
+    }
+    set(z);
+    if (!fits()) set(1);
+  }, []);
+  const fitAndRemember = useCallback(() => {
+    fitSlide();
+    fitted.current = sizeNow();
+  }, [fitSlide, sizeNow]);
+  // Before a slide is first painted; then whenever the deck, the window or the slide's own
+  // content changes size (an answer's feedback appearing, cards re-flowing into fewer columns).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fitted again for every slide
+  useLayoutEffect(fitAndRemember, [fitAndRemember, index]);
+  useEffect(() => {
+    // On entering the step the host has only just said how much room there is.
+    fitAndRemember();
+    if (typeof ResizeObserver === 'undefined') return;
+    let frame = 0;
+    const again = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (sizeNow() !== fitted.current) fitAndRemember();
+      });
+    };
+    const watcher = new ResizeObserver(again);
+    for (const el of [root.current, card.current, figures.current]) if (el) watcher.observe(el);
+    // A new window size is a fresh start for the slide on screen.
+    const resized = () => {
+      fitRuns.current.runs = 0;
+      fitted.current = '';
+      again();
+    };
+    window.addEventListener('resize', resized);
+    return () => {
+      cancelAnimationFrame(frame);
+      watcher.disconnect();
+      window.removeEventListener('resize', resized);
+    };
+  }, [fitAndRemember, sizeNow]);
 
+  const slide = slides[index];
+  const small =
+    'grid size-8 shrink-0 place-items-center rounded-lg border transition-colors disabled:opacity-40';
   return (
+    // The deck is the page, not a box on it: what the slide says sits in one card on the left,
+    // with where you are in the deck at its top, and what it shows takes the rest of the width.
+    // It is laid out from the width the deck really has (`@4xl:` is a deck of 56rem or more),
+    // so it reads the same beside a list of steps, in a preview column and on a phone, where it
+    // becomes one column in reading order.
     <section
-      className={cn(
-        'grid gap-3',
-        full && 'fixed inset-0 z-50 content-center overflow-y-auto bg-bg p-4 sm:p-8',
-      )}
+      ref={root}
+      // A slide comes in from the side. `overflow-x-clip` keeps that movement inside the deck: on
+      // a phone it would otherwise widen the page for a moment and push the step bar off screen.
+      // (Clip, not hidden: the text card must still pin to the window.) The side padding, taken
+      // back by the margin, leaves the cards' shadows unclipped.
+      className="@container -mx-2 grid scroll-mt-32 touch-pan-y grid-cols-[minmax(0,1fr)] gap-3 overflow-x-clip px-2 select-text"
       onKeyDown={onKeyDown}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
       aria-roledescription="slide deck"
       aria-label={s.title ?? 'Slides'}
     >
       <div
-        ref={stage}
-        // One size for every slide of a deck, so the controls below never move. The height is the
-        // room the page has for the deck (--lesson-room, set by the lesson player: the frame and
-        // its controls then sit inside the window, with no page scrolling) less the controls row;
-        // without a host value it is the window less 8rem, as before. A slide with more than fits
-        // scrolls inside its own frame. `container-type: size` lets the slide read the frame's
-        // width and height.
-        className={cn(
-          'relative touch-pan-y overflow-hidden rounded-3xl border border-line bg-surface shadow-soft select-text [container-type:size]',
-          full
-            ? 'h-[calc(100svh-8rem)]'
-            : 'h-[clamp(20rem,calc(var(--lesson-room,calc(100svh-4.75rem))-3.25rem),620px)]',
-        )}
-        style={
-          full || !tallest
-            ? undefined
-            : {
-                // The tallest slide plus its padding, never more than the room, never under 20rem.
-                height: `clamp(20rem, min(calc(var(--lesson-room, calc(100svh - 4.75rem)) - 3.25rem), ${Math.ceil(tallest + 88)}px), 620px)`,
-              }
-        }
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
+        ref={grid}
+        className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 @4xl:grid-cols-[minmax(17rem,0.9fr)_minmax(0,1.6fr)] @4xl:gap-5"
       >
-        {slides.map((slide, i) => (
-          <SlideFrame
-            // biome-ignore lint/suspicious/noArrayIndexKey: slides are positional
-            key={i}
-            slide={slide}
-            number={i + 1}
-            total={slides.length}
-            active={i === index}
-            direction={direction}
-            onHeight={reportHeight}
-          />
-        ))}
-      </div>
+        {/* Pinned under the lesson's header while a tall picture or code sample scrolls past. */}
+        <div
+          ref={card}
+          className="min-w-0 touch-pan-y rounded-2xl border border-line bg-surface p-4 [scrollbar-width:thin] @4xl:sticky @4xl:top-[4.25rem] @4xl:max-h-[calc(100svh-4.25rem-4.75rem)] @4xl:overflow-y-auto"
+        >
+          <div className="flex items-center gap-2">
+            {/* One line, never wrapping: a label that wrapped would push the slide's text down. */}
+            <p className="eyebrow min-w-0 flex-1 truncate">
+              Slide {index + 1} of {slides.length}
+              {slide?.kicker ? ` · ${slide.kicker}` : ''}
+            </p>
+            {narration && (
+              <button
+                type="button"
+                onClick={togglePlay}
+                className={cn(
+                  small,
+                  playing
+                    ? 'border-brand bg-brand-soft text-brand'
+                    : 'border-line-2 bg-surface text-ink hover:border-ink-2',
+                )}
+                aria-label={playing ? 'Pause' : 'Play the slides'}
+                aria-pressed={playing}
+                title={playing ? 'Pause' : 'Play the slides'}
+              >
+                {playing ? (
+                  <Pause className="size-3.5" aria-hidden />
+                ) : (
+                  <Play className="ml-0.5 size-3.5" aria-hidden />
+                )}
+              </button>
+            )}
+            {speechOk && (
+              <button
+                type="button"
+                onClick={() => setVoice((v) => !v)}
+                className={cn(
+                  small,
+                  voice
+                    ? 'border-brand bg-brand-soft text-brand'
+                    : 'border-line-2 bg-surface text-muted hover:text-ink',
+                )}
+                aria-label={voice ? 'Stop reading aloud' : 'Read the slides aloud while playing'}
+                aria-pressed={voice}
+                title={voice ? 'Reading aloud' : 'Read aloud'}
+              >
+                {voice ? (
+                  <Volume2 className="size-3.5" aria-hidden />
+                ) : (
+                  <VolumeOff className="size-3.5" aria-hidden />
+                )}
+              </button>
+            )}
+            {!hostTurns && slides.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => go(index - 1)}
+                  disabled={index === 0}
+                  className={cn(small, 'border-line-2 bg-surface text-ink hover:border-ink-2')}
+                  aria-label="Previous slide"
+                >
+                  <ChevronLeft className="size-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => go(index + 1)}
+                  disabled={index === last}
+                  className={cn(small, 'border-ink bg-ink text-surface')}
+                  aria-label="Next slide"
+                >
+                  <ChevronRight className="size-4" aria-hidden />
+                </button>
+              </>
+            )}
+          </div>
+          {slides.length > 1 && (
+            <div className="mt-1 flex gap-1.5">
+              {slides.map((sl, i) => (
+                <button
+                  // biome-ignore lint/suspicious/noArrayIndexKey: slides are positional
+                  key={i}
+                  type="button"
+                  onClick={() => go(i)}
+                  title={`Slide ${i + 1}: ${sl.title}`}
+                  aria-label={`Go to slide ${i + 1}: ${sl.title}`}
+                  aria-current={i === index ? 'step' : undefined}
+                  // The bar is thin; the button around it is what a finger lands on.
+                  className="group min-w-0 flex-1 py-1.5 pointer-coarse:py-3"
+                >
+                  <span
+                    className={cn(
+                      'relative block h-1.5 overflow-hidden rounded-full transition-colors group-hover:bg-brand-deep',
+                      i === index && playing
+                        ? 'bg-brand/30'
+                        : i <= index
+                          ? 'bg-brand'
+                          : seen.has(i)
+                            ? 'bg-brand/40'
+                            : 'bg-line-2',
+                    )}
+                  >
+                    {i === index && playing && (
+                      <span
+                        className="absolute inset-y-0 left-0 rounded-full bg-brand"
+                        style={{ width: `${Math.round(progress * 100)}%` }}
+                      />
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          {/* What `fitSlide` enlarges on a thin slide; the header above keeps its size. */}
+          <div ref={text}>
+            {slide && (
+              // Keyed by the slide, so each one comes in from the side it was reached from.
+              <SlideText key={index} slide={slide} number={index + 1} direction={direction} />
+            )}
+          </div>
+        </div>
 
-      <div className="flex items-center gap-2 sm:gap-3">
-        <button
-          type="button"
-          onClick={() => go(index - 1)}
-          disabled={index === 0}
-          className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink transition hover:border-ink-2 disabled:opacity-35"
-          aria-label="Previous slide"
-        >
-          <ChevronLeft className="size-5" aria-hidden />
-        </button>
-        <button
-          type="button"
-          onClick={togglePlay}
-          className={cn(
-            'grid size-10 shrink-0 place-items-center rounded-xl border transition',
-            playing
-              ? 'border-brand bg-brand-soft text-brand'
-              : 'border-line bg-surface text-ink hover:border-ink-2',
-          )}
-          aria-label={playing ? 'Pause' : 'Play the slides'}
-          aria-pressed={playing}
-          title={playing ? 'Pause' : 'Play the slides'}
-        >
-          {playing ? (
-            <Pause className="size-4" aria-hidden />
-          ) : (
-            <Play className="ml-0.5 size-4" aria-hidden />
-          )}
-        </button>
-        <div className="flex min-w-0 flex-1 items-center gap-1">
-          {slides.map((slide, i) => (
-            <button
+        <div ref={figures} className="@container/fig relative min-w-0">
+          {slides.map((sl, i) => (
+            <SlideFigure
               // biome-ignore lint/suspicious/noArrayIndexKey: slides are positional
               key={i}
-              type="button"
-              onClick={() => go(i)}
-              aria-label={`Slide ${i + 1}: ${slide.title}`}
-              aria-current={i === index ? 'step' : undefined}
-              className="group grid h-6 flex-1 place-items-center"
-            >
-              <span
-                className={cn(
-                  'relative h-1.5 w-full overflow-hidden rounded-full transition-all duration-300',
-                  i === index
-                    ? playing
-                      ? 'bg-brand/30'
-                      : 'bg-brand'
-                    : seen.has(i)
-                      ? 'bg-brand/45 group-hover:bg-brand/70'
-                      : 'bg-line-2 group-hover:bg-muted/50',
-                )}
-              >
-                {i === index && playing && (
-                  <span
-                    className="absolute inset-y-0 left-0 rounded-full bg-brand"
-                    style={{ width: `${Math.round(progress * 100)}%` }}
-                  />
-                )}
-              </span>
-            </button>
+              slide={sl}
+              number={i + 1}
+              active={i === index}
+              direction={direction}
+            />
           ))}
         </div>
-        <span className="shrink-0 font-mono text-[12px] text-muted tabular-nums">
-          {index + 1}/{slides.length}
-        </span>
-        {speechOk && (
-          <button
-            type="button"
-            onClick={() => setVoice((v) => !v)}
-            className={cn(
-              'grid size-10 shrink-0 place-items-center rounded-xl border transition',
-              voice
-                ? 'border-brand bg-brand-soft text-brand'
-                : 'border-line bg-surface text-muted hover:text-ink',
-            )}
-            aria-label={voice ? 'Stop reading aloud' : 'Read the slides aloud while playing'}
-            aria-pressed={voice}
-            title={voice ? 'Reading aloud' : 'Read aloud'}
-          >
-            {voice ? (
-              <Volume2 className="size-4" aria-hidden />
-            ) : (
-              <VolumeOff className="size-4" aria-hidden />
-            )}
-          </button>
-        )}
-        {/* In the controls row, not on the frame: there it covered the corner of a slide. */}
-        <button
-          type="button"
-          onClick={toggleFull}
-          className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted transition hover:text-ink"
-          aria-label={full ? 'Exit full screen' : 'Show the slides full screen'}
-          title={full ? 'Exit full screen' : 'Full screen'}
-        >
-          {full ? (
-            <Minimize2 className="size-4" aria-hidden />
-          ) : (
-            <Maximize2 className="size-4" aria-hidden />
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => go(index + 1)}
-          disabled={index === last}
-          className={cn(
-            'grid size-10 shrink-0 place-items-center rounded-xl transition disabled:opacity-35',
-            index === last
-              ? 'border border-line bg-surface text-ok'
-              : 'bg-ink text-surface hover:opacity-90',
-          )}
-          aria-label={index === last ? 'Last slide' : 'Next slide'}
-        >
-          {index === last ? (
-            <Check className="size-5" aria-hidden />
-          ) : (
-            <ChevronRight className="size-5" aria-hidden />
-          )}
-        </button>
       </div>
-      {yourTurn && slides[index]?.try && (
+
+      {yourTurn && slide?.try && (
         <p className="flex items-center gap-2 rounded-xl border border-brand/25 bg-brand-soft px-3.5 py-2 text-[13px] text-ink">
           <Sparkles className="size-4 shrink-0 text-brand" aria-hidden />
           Your turn: try it, then press play to carry on.
         </p>
       )}
       <p className="sr-only" aria-live="polite">
-        Slide {index + 1} of {slides.length}: {slides[index]?.title}
+        Slide {index + 1} of {slides.length}: {slide?.title}
       </p>
     </section>
   );
 }
 
-function SlideFrame({
+/**
+ * How far a thin slide may be enlarged to fill the room it has. A little, never more: body text
+ * goes from 16 to 20px at most, which still reads as a page and not a poster. A slide with room
+ * left over after that needs a picture, not bigger type.
+ */
+const MAX_FIT = 1.25;
+const canZoom = () =>
+  typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('zoom', '1.5');
+
+const accentOf = (slide: Slide, number: number) =>
+  slide.accent ?? ACCENTS[(number - 1) % ACCENTS.length] ?? 'g0';
+
+/** Visuals that read well in half a column, beside a picture. */
+function fitsBeside(v: Visual) {
+  if (v.type === 'code' || v.type === 'sequence') return false;
+  // Three columns of anything, or up to six of short numbers (a threshold's counts and scores).
+  if (v.type === 'table')
+    return (
+      v.columns.length <= 3 ||
+      (v.columns.length <= 6 && v.cells.every((r) => r.every((c) => c.length <= 5)))
+    );
+  return true;
+}
+
+/** A slide shows something (a picture, a sample, a try-it) besides what it says. */
+const showsSomething = (slide: Slide) => Boolean(slide.animation || slide.visual || slide.try);
+
+function Points({
+  points,
+  accent,
+  from,
+  boxed = false,
+}: {
+  points: readonly string[];
+  accent: string;
+  /** The place of the first point in the slide's build order. */
+  from: number;
+  /** As the slide's own figure: a ruled list in a box, in larger type. */
+  boxed?: boolean;
+}) {
+  return (
+    <ul
+      className={cn(
+        'grid',
+        boxed ? 'divide-y divide-line rounded-2xl border border-line bg-surface' : 'gap-2',
+      )}
+    >
+      {points.map((p, i) => (
+        <li
+          key={p}
+          className={cn('build flex gap-2.5', boxed && 'px-4 py-3')}
+          style={order(from + i)}
+        >
+          <span
+            className="mt-[3px] grid size-5 shrink-0 place-items-center rounded-md"
+            style={{ background: tint(accent, 18), color: `var(--${accent})` }}
+            aria-hidden
+          >
+            <ArrowRight className="size-3" />
+          </span>
+          <Rich
+            text={p}
+            inline
+            className={cn('text-ink', boxed ? 'text-[15.5px]' : 'text-[15px]')}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** What a slide says: its headline, its paragraph and, beside a figure, its points. */
+function SlideText({
   slide,
   number,
-  total,
-  active,
   direction,
-  onHeight,
 }: {
   slide: Slide;
   number: number;
-  total: number;
+  direction: 'from-right' | 'from-left';
+}) {
+  const accent = accentOf(slide, number);
+  return (
+    <div
+      className={`deck-slide is-active ${direction} mt-1.5 grid grid-cols-[minmax(0,1fr)] gap-2.5`}
+    >
+      <h3 className="build text-[clamp(19px,5cqw,22px)] leading-[1.2] tracking-tight text-balance">
+        {slide.title}
+      </h3>
+      {slide.body && (
+        <div className="build" style={order(1)}>
+          <Rich text={slide.body} className="text-[16px] leading-relaxed text-ink-2" />
+        </div>
+      )}
+      {showsSomething(slide) && slide.points.length > 0 && (
+        <Points points={slide.points} accent={accent} from={2} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * What a slide shows: its moving picture, its visual, its try-it and the note about them. A slide
+ * with nothing to show puts its points here, so they are read as the slide's figure.
+ */
+function SlideFigure({
+  slide,
+  number,
+  active,
+  direction,
+}: {
+  slide: Slide;
+  number: number;
   active: boolean;
   direction: 'from-right' | 'from-left';
-  /** The height this slide needs, so the deck can size itself to its tallest one. */
-  onHeight?: (px: number) => void;
 }) {
-  const accent = slide.accent ?? ACCENTS[(number - 1) % ACCENTS.length] ?? 'g0';
+  const accent = accentOf(slide, number);
   const anim = slide.animation;
-  // A picture only sits beside the headline when the headline column has enough to say to fill
-  // it. A kicker and a title alone next to a dense picture leave half the slide empty and cram
-  // the other half; with little text the title goes across the top and the picture takes the
-  // full width below, so the slide covers its ground evenly.
-  const saysEnough = (slide.body?.length ?? 0) + slide.points.join(' ').length >= 110;
-  const side =
-    saysEnough &&
-    (Boolean(anim) ||
-      (slide.visual &&
-        !slide.try &&
-        // Code, a row of terms and a two-column comparison are all wide by nature: squeezed into
-        // half a slide they wrap to shreds, so they take the full width under the headline.
-        slide.visual.type !== 'code' &&
-        slide.visual.type !== 'sequence' &&
-        slide.visual.type !== 'table' &&
-        slide.visual.type !== 'compare'));
-  let n = 0;
+  const figure = showsSomething(slide);
+  // The text beside this builds in first (headline, paragraph, points), then the figure.
+  let n = 2 + (figure ? slide.points.length : 0);
   const next = () => order(n++);
   // A printed result is only worth something if the student has guessed at it first. So the
   // output of a code sample, and the note that explains it, wait for the student to ask.
   const gated = slide.visual?.type === 'code' && slide.visual.output !== undefined;
   const [shown, setShown] = useState(false);
   const reveal = gated ? { shown, onShow: () => setShown(true) } : undefined;
-
-  // The frame never grows: taller content scrolls inside it, with a "More" cue while some is hidden.
-  const scroller = useRef<HTMLDivElement>(null);
-  const content = useRef<HTMLDivElement>(null);
-  // The deck sizes itself to its tallest slide, so it needs each slide's natural height.
-  useEffect(() => {
-    const el = content.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const report = () => onHeight?.(el.getBoundingClientRect().height);
-    report();
-    const observer = new ResizeObserver(report);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [onHeight]);
-  const [scrollable, setScrollable] = useState(false);
-  const [more, setMore] = useState(false);
-  const measure = () => {
-    const el = scroller.current;
-    if (!el) return;
-    setScrollable(el.scrollHeight > el.clientHeight + 4);
-    setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 12);
-  };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: measure reads refs only
-  useEffect(() => {
-    if (!active) return;
-    const el = scroller.current;
-    if (!el) return;
-    el.scrollTop = 0;
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    if (content.current) ro.observe(content.current);
-    return () => ro.disconnect();
-  }, [active]);
-
+  const pointsHere = !figure && slide.points.length > 0;
+  // A picture with cards, a comparison, a flow or a short table beside it, not under it. Code
+  // and wide tables need the full width, so they stay underneath.
+  const pair = Boolean(anim && slide.visual && fitsBeside(slide.visual));
+  if (!figure && !pointsHere && !slide.note) return null;
   return (
-    <section
+    <div
       className={cn(
-        'deck-slide absolute inset-0',
-        // Inactive slides stay mounted (so try-it answers survive) and keep being laid out, so
-        // the deck knows every slide's height from the start and its frame never resizes
-        // mid-deck. `invisible` also takes them out of the tab order, and aria-hidden out of
-        // the reading order.
-        active ? `is-active ${direction}` : 'invisible',
+        'deck-slide grid max-w-[60rem] grid-cols-[minmax(0,1fr)] gap-3',
+        // --fig-h caps a moving picture (see AnimationView). Under the text it may take about
+        // half a phone screen. Beside the text it gets the height the window has left for this
+        // step, less its own frame and caption (4.5rem) and, where there is one, the note under
+        // it (5rem more), so the picture and its note are read together without scrolling. On a
+        // tall window that is a tall picture: nothing else caps it but the width it has.
+        '[--fig-h:min(44svh,20rem)]',
+        slide.note
+          ? '@4xl:[--fig-h:max(13rem,calc(var(--lesson-room,70svh)-9.5rem))]'
+          : '@4xl:[--fig-h:max(13rem,calc(var(--lesson-room,70svh)-4.5rem))]',
+        // Slides off screen stay mounted (so try-it answers survive) and keep being laid out at
+        // the column's width, so each is already the right shape when it is turned to. They take
+        // no room; `invisible` also takes them out of the tab order, aria-hidden out of the
+        // reading order.
+        active
+          ? `is-active ${direction}`
+          : 'invisible absolute inset-x-0 top-0 h-0 overflow-hidden',
       )}
       aria-hidden={!active}
-      style={{
-        backgroundImage: `radial-gradient(60% 70% at 100% 0%, ${tint(accent, 13)}, transparent 70%), radial-gradient(40% 50% at 0% 100%, ${tint(accent, 7)}, transparent 70%)`,
-      }}
     >
-      {/* A big, faint slide number, like a designed deck. */}
-      <span
-        className="pointer-events-none absolute right-14 bottom-3 font-display text-[64px] leading-none font-extrabold text-ink/[0.045] select-none @lg:text-[88px]"
-        aria-hidden
-      >
-        {String(number).padStart(2, '0')}
-      </span>
+      {/* Picture and visual side by side in a wide column (data-pair; `fitSlide` then sizes the
+          picture to the row), one above the other otherwise. */}
       <div
-        ref={scroller}
-        onScroll={measure}
-        tabIndex={scrollable ? 0 : undefined}
-        // Padding and gaps tighten on a short frame (cqh is 1% of the frame's height), so more
-        // of a slide fits before it has to scroll; at the full 620px frame they are as designed.
-        // touch-pan-y: this scroller takes vertical touches only, so a sideways swipe reaches
-        // the deck (the frame's own touch-pan-y does not apply inside a scroll container).
-        className="relative flex h-full touch-pan-y flex-col overflow-y-auto px-5 pt-6 pb-5 [scrollbar-width:thin] @lg:px-8 @lg:py-[clamp(1rem,8cqh-0.75rem,2rem)]"
+        data-pair={pair || undefined}
+        className={cn(
+          'grid grid-cols-[minmax(0,1fr)] gap-3',
+          pair && '@xl/fig:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] @xl/fig:items-center',
+        )}
       >
-        {/* Shorter slides sit in the middle of the frame, like a designed deck. */}
-        <div
-          ref={content}
-          className="relative my-auto grid grid-cols-[minmax(0,1fr)] gap-[clamp(0.75rem,4cqh-0.3rem,1.25rem)]"
-        >
-          <div
-            className={cn(
-              // --fig-h caps a moving picture (see AnimationView). Stacked under the text it may
-              // take about a third of the frame; beside the text, the frame's full height.
-              'relative grid grid-cols-[minmax(0,1fr)] gap-[clamp(0.875rem,5cqh-0.4rem,1.5rem)] [--fig-h:34cqh]',
-              // Side by side when the frame itself is wide enough (42rem), whatever the window is.
-              side &&
-                '@2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] @2xl:items-center @2xl:gap-8 @2xl:[--fig-h:calc(100cqh-8rem)]',
-            )}
-          >
-            <div className="grid content-start gap-3">
-              <span className="build flex items-center gap-2" style={next()}>
-                <span
-                  className="rounded-full px-2.5 py-1 font-mono text-[10.5px] font-bold tracking-[0.1em] uppercase"
-                  style={{ color: `var(--${accent})`, background: tint(accent, 14) }}
-                >
-                  {slide.kicker ?? `Slide ${number} of ${total}`}
-                </span>
-              </span>
-              <h3
-                className="build text-[clamp(21px,3.7cqw,28px)] leading-[1.15] tracking-tight"
-                style={next()}
-              >
-                {slide.title}
-              </h3>
-              {slide.body && (
-                <div className="build" style={next()}>
-                  <Rich text={slide.body} className="text-[15.5px] leading-relaxed text-ink-2" />
-                </div>
-              )}
-              {slide.points.length > 0 && (
-                <ul className="grid gap-2">
-                  {slide.points.map((p) => (
-                    <li key={p} className="build flex gap-2.5" style={next()}>
-                      <span
-                        className="mt-[3px] grid size-5 shrink-0 place-items-center rounded-md"
-                        style={{ background: tint(accent, 18), color: `var(--${accent})` }}
-                        aria-hidden
-                      >
-                        <ArrowRight className="size-3" />
-                      </span>
-                      <Rich text={p} inline className="text-[14.5px] text-ink" />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            {anim ? (
-              <div className="build min-w-0" style={next()}>
-                {/* Mounted only while showing, so the story plays from its start each time. */}
-                {active && <AnimationView name={anim.name} caption={anim.caption} />}
-              </div>
-            ) : (
-              slide.visual && (
-                // Each visual's slot is its own container: the visual arranges itself from the
-                // width it really has (full width, or the narrower column beside the headline).
-                <div className="build @container min-w-0" style={next()}>
-                  <VisualView visual={slide.visual} accent={accent} reveal={reveal} />
-                </div>
-              )
-            )}
+        {anim && (
+          <div className="build min-w-0" style={next()}>
+            {/* Mounted only while showing, so the story plays from its start each time. */}
+            {active && <AnimationView name={anim.name} caption={anim.caption} />}
           </div>
-          {anim && slide.visual && (
-            <div className="build @container relative min-w-0" style={next()}>
-              <VisualView visual={slide.visual} accent={accent} reveal={reveal} />
-            </div>
-          )}
-          {slide.try && (
-            <div className="build relative" style={next()}>
-              <TryView t={slide.try} accent={accent} />
-            </div>
-          )}
-          {slide.note && (
-            <div
-              className={cn(
-                'build relative flex gap-2.5 rounded-xl border border-line bg-surface/80 px-3.5 py-2.5 text-[13.5px] backdrop-blur',
-                gated && !shown && 'invisible',
-              )}
-              aria-hidden={gated && !shown ? true : undefined}
-              style={next()}
-            >
-              <Lightbulb className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden />
-              <Rich text={slide.note} inline />
-            </div>
-          )}
-        </div>
+        )}
+        {slide.visual && (
+          // Each visual's slot is its own container: the visual arranges itself from the width
+          // it really has.
+          <div className="build @container min-w-0" style={next()}>
+            <VisualView visual={slide.visual} accent={accent} reveal={reveal} />
+          </div>
+        )}
       </div>
-      {more && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 grid h-16 place-items-end justify-center bg-gradient-to-t from-surface to-transparent pb-2.5">
-          <button
-            type="button"
-            onClick={() =>
-              scroller.current?.scrollBy({
-                top: scroller.current.clientHeight * 0.8,
-                behavior: 'smooth',
-              })
-            }
-            className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1 text-[12px] font-semibold text-ink-2 shadow-soft hover:text-ink"
-          >
-            More <ChevronDown className="size-3.5" aria-hidden />
-          </button>
+      {slide.try && (
+        <div className="build min-w-0" style={next()}>
+          <TryView t={slide.try} accent={accent} />
         </div>
       )}
-    </section>
+      {pointsHere && <Points points={slide.points} accent={accent} from={n} boxed />}
+      {slide.note && (
+        <div
+          className={cn(
+            'build flex gap-2.5 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[14px] text-ink-2',
+            gated && !shown && 'invisible',
+          )}
+          aria-hidden={gated && !shown ? true : undefined}
+          style={order(n + (pointsHere ? slide.points.length : 0))}
+        >
+          <Lightbulb className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden />
+          <Rich text={slide.note} inline />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -695,7 +804,15 @@ function useSlotWidth() {
     watcher.current?.disconnect();
     watcher.current = null;
     if (!el) return;
-    const read = () => setWidth(Math.round(el.getBoundingClientRect().width));
+    // The width the slot has before a slide is enlarged (see `fitSlide`): its own CSS width
+    // times the zoom it sits in. Counting columns from the enlarged width instead would re-flow
+    // the cards each time the slide is enlarged, which changes its height and makes the slide
+    // fit itself again, round and round.
+    const read = () => {
+      const own = Number.parseFloat(getComputedStyle(el).width) || el.getBoundingClientRect().width;
+      const zoom = (el as HTMLElement & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
+      setWidth(Math.round(own * zoom));
+    };
     read();
     if (typeof ResizeObserver === 'undefined') return;
     watcher.current = new ResizeObserver(read);
@@ -708,7 +825,8 @@ function useSlotWidth() {
  * Cards, as many to a row as the room allows. The grid measures its own slot (the whole frame, or
  * the narrower column beside a headline), gives each card the width its longest line needs, and
  * drops a column rather than leave one card stranded on a row of its own. Five or more become a
- * compact list, icon beside the text, so they still fit the frame.
+ * compact list, icon beside the text, and so does any set that ends up one card to a row: three
+ * rows then take a third of the height of three stacked cards.
  */
 function IconCards({ items }: { items: Extract<Visual, { type: 'icons' }>['items'] }) {
   const [ref, width] = useSlotWidth();
@@ -723,6 +841,7 @@ function IconCards({ items }: { items: Extract<Visual, { type: 'icons' }>['items
   const gap = list ? 8 : 10;
   let cols = Math.min(Math.max(1, Math.floor((width + gap) / (want + gap))), n);
   while (cols > 1 && (n % cols === 1 || (n % cols !== 0 && n % (cols - 1) === 0))) cols -= 1;
+  const rows = width > 0 && cols === 1;
   return (
     <ul
       ref={ref}
@@ -740,16 +859,22 @@ function IconCards({ items }: { items: Extract<Visual, { type: 'icons' }>['items
             key={it.label}
             className={cn(
               'build grid content-start rounded-2xl border border-line bg-surface shadow-soft',
-              list
-                ? 'grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 p-2.5 @md:grid-cols-1 @md:gap-2 @md:p-3.5'
-                : 'gap-2 p-3.5',
+              rows
+                ? 'grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 p-3'
+                : list
+                  ? 'grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 p-2.5 @md:grid-cols-1 @md:gap-2 @md:p-3.5'
+                  : 'gap-2 p-3.5',
             )}
             style={order(i + 2)}
           >
             <span
               className={cn(
                 'grid place-items-center rounded-xl',
-                list ? 'row-span-2 size-9 @md:row-span-1 @md:size-10' : 'size-10',
+                rows
+                  ? 'row-span-2 size-10'
+                  : list
+                    ? 'row-span-2 size-9 @md:row-span-1 @md:size-10'
+                    : 'size-10',
               )}
               style={{ background: tint(a, 15), color: `var(--${a})` }}
             >
@@ -757,14 +882,14 @@ function IconCards({ items }: { items: Extract<Visual, { type: 'icons' }>['items
             </span>
             <span
               className={cn(
-                'text-[14px] leading-snug font-semibold [overflow-wrap:anywhere] text-ink',
-                list && !it.sub && 'self-center @md:self-auto',
+                'text-[14.5px] leading-snug font-semibold [overflow-wrap:anywhere] text-ink',
+                !rows && list && !it.sub && 'self-center @md:self-auto',
               )}
             >
               {it.label}
             </span>
             {it.sub && (
-              <span className="text-[12.5px] leading-snug [overflow-wrap:anywhere] text-muted">
+              <span className="text-[13.5px] leading-snug [overflow-wrap:anywhere] text-ink-2">
                 {it.sub}
               </span>
             )}
@@ -772,6 +897,98 @@ function IconCards({ items }: { items: Extract<Visual, { type: 'icons' }>['items
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * A table's highlighted column as a picture (see table-chart.ts): bars from a zero line, or one
+ * bar split into the parts that add up to the table's total. Every bar carries its number, in
+ * text colour, so nothing is read off an axis. The table above is the same data for a screen
+ * reader, so the picture is hidden from it.
+ */
+function TableBars({ chart, accent, from }: { chart: TableChart; accent: string; from: number }) {
+  const frame = 'build grid gap-2.5 rounded-2xl border border-line bg-surface p-4';
+  if (chart.kind === 'sum') {
+    const hue = (i: number) => `var(--${ACCENTS[i % ACCENTS.length] ?? 'g0'})`;
+    return (
+      <figure className={frame} style={order(from)} aria-hidden data-extra>
+        <div className="flex h-9 gap-0.5">
+          {chart.parts.map((p, i) => (
+            <span
+              key={p.label}
+              className="h-full min-w-1.5 first:rounded-l-lg last:rounded-r-lg"
+              style={{ flexGrow: p.value, flexBasis: 0, background: hue(i) }}
+            />
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ink-2">
+          {chart.parts.map((p, i) => (
+            <span key={p.label} className="inline-flex items-center gap-1.5">
+              <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: hue(i) }} />
+              {p.label}
+              <b className="font-mono font-semibold text-ink tabular-nums">{p.shown}</b>
+            </span>
+          ))}
+        </div>
+        <figcaption className="text-[13px] text-ink-2">
+          The {chart.parts.length} parts add up to
+          {chart.total.label ? ` the ${chart.total.label.toLowerCase()}:` : ''}{' '}
+          <b className="font-mono font-semibold text-ink tabular-nums">{chart.total.shown}</b>
+        </figcaption>
+      </figure>
+    );
+  }
+  const most = Math.max(0, ...chart.bars.map((b) => b.value));
+  const least = Math.min(0, ...chart.bars.map((b) => b.value));
+  const span = most - least;
+  // 96px for the whole span of the numbers, and a line of room for the number on each bar.
+  const px = (v: number) => Math.max(2, Math.round((Math.abs(v) / span) * 96));
+  const above = Math.round((most / span) * 96) + 20;
+  const below = least < 0 ? Math.round((-least / span) * 96) + 20 : 0;
+  const number = 'font-mono text-[12px] leading-5 font-semibold text-ink tabular-nums';
+  const bar = { background: `var(--${accent})` };
+  return (
+    <figure className={frame} style={order(from)} aria-hidden data-extra>
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: `repeat(${chart.bars.length}, minmax(0, 1fr))` }}
+      >
+        {chart.bars.map((b, i) => (
+          <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: one bar per table row, fixed order
+            key={i}
+            className="grid justify-items-center"
+            style={{ gridTemplateRows: `${above}px ${below}px auto` }}
+          >
+            {/* The zero line runs under every column; bars above it stand on it. */}
+            <div className="flex w-full flex-col items-center justify-end border-b border-line-2 px-1.5">
+              {b.value >= 0 && <span className={number}>{b.shown}</span>}
+              {b.value > 0 && (
+                <span
+                  className="w-full max-w-12 rounded-t-[4px]"
+                  style={{ ...bar, height: px(b.value) }}
+                />
+              )}
+            </div>
+            <div className="flex w-full flex-col items-center px-1.5">
+              {b.value < 0 && (
+                <>
+                  <span
+                    className="w-full max-w-12 rounded-b-[4px]"
+                    style={{ ...bar, height: px(b.value) }}
+                  />
+                  <span className={number}>{b.shown}</span>
+                </>
+              )}
+            </div>
+            <span className="mt-1 max-w-full truncate px-1 text-[12px] text-muted">{b.label}</span>
+          </div>
+        ))}
+      </div>
+      <figcaption className="text-center text-[12.5px] text-muted">
+        {chart.name} for each row{chart.by ? `, by ${chart.by.toLowerCase()}` : ''}
+      </figcaption>
+    </figure>
   );
 }
 
@@ -829,33 +1046,43 @@ function VisualView({
       // One connected line of steps. Left to right only where every step has room on a single
       // row (a wide slot and at most four steps); otherwise top to bottom, with a down arrow in
       // a gutter before each step. A wrapped row left arrows dangling at the start of a line.
-      const row = visual.steps.length <= 4;
+      // Four steps need a wider slot than three before a row suits them: squeezed into a narrow
+      // one (an enlarged slide) their labels broke mid-word while the height went unused.
+      const n = visual.steps.length;
+      const row =
+        n > 4
+          ? null
+          : n === 4
+            ? {
+                list: '@3xl:flex-row @3xl:items-stretch',
+                step: '@3xl:flex-1',
+                arrow: '@3xl:rotate-0',
+                gutter: '@3xl:hidden',
+              }
+            : {
+                list: '@xl:flex-row @xl:items-stretch',
+                step: '@xl:flex-1',
+                arrow: '@xl:rotate-0',
+                gutter: '@xl:hidden',
+              };
       return (
-        <ol
-          className={cn(
-            'flex flex-col items-stretch gap-1.5',
-            row && '@xl:flex-row @xl:items-stretch',
-          )}
-        >
+        <ol className={cn('flex flex-col items-stretch gap-1.5', row?.list)}>
           {visual.steps.map((st, i) => {
             const Icon = st.icon ? iconOf(st.icon) : null;
             return (
               <li
                 key={st.label}
-                className={cn('build flex min-w-0 items-center gap-1.5', row && '@xl:flex-1')}
+                className={cn('build flex min-w-0 items-center gap-1.5', row?.step)}
                 style={order(i + 2)}
               >
                 {i > 0 ? (
                   <ArrowRight
-                    className={cn(
-                      'size-4 shrink-0 rotate-90 self-center text-muted',
-                      row && '@xl:rotate-0',
-                    )}
+                    className={cn('size-4 shrink-0 rotate-90 self-center text-muted', row?.arrow)}
                     aria-hidden
                   />
                 ) : (
                   // The first step keeps the arrow gutter empty, so every step lines up.
-                  <span className={cn('size-4 shrink-0', row && '@xl:hidden')} aria-hidden />
+                  <span className={cn('size-4 shrink-0', row?.gutter)} aria-hidden />
                 )}
                 <span
                   className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 py-2.5 text-[13.5px] font-semibold text-ink"
@@ -930,7 +1157,7 @@ function VisualView({
       ];
       return (
         // Side by side where each side gets a readable width (a 20rem slot), stacked below that.
-        <div className="grid gap-2.5 @xs:grid-cols-2">
+        <div className="grid gap-2.5 @sm:grid-cols-2">
           {sides.map(({ side, good }, i) => {
             const neutral = visual.better === 'none';
             const Icon = neutral ? null : good ? CircleCheck : CircleX;
@@ -998,71 +1225,77 @@ function VisualView({
           )}
         </div>
       );
-    case 'table':
+    case 'table': {
+      const chart = tableChart(visual);
       return (
-        // Scrolls sideways inside its own box on a narrow screen; the slide itself never does.
-        <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-soft">
-          <table className="w-full border-collapse text-[13.5px] tabular-nums">
-            <thead>
-              <tr className="border-line border-b bg-surface-2 text-left">
-                {visual.columns.map((c, j) => (
-                  <th
-                    key={c}
-                    scope="col"
-                    className="px-3 py-2 font-semibold whitespace-nowrap text-ink"
-                    style={j === visual.highlight ? { color: `var(--${accent})` } : undefined}
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
+          {/* On a phone the cells tighten and a long column name wraps, so four columns fit the
+            screen. A table still too wide scrolls sideways inside its own box; the page never does. */}
+          <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-soft">
+            <table className="w-full border-collapse text-[13.5px] tabular-nums">
+              <thead>
+                <tr className="border-line border-b bg-surface-2 text-left">
+                  {visual.columns.map((c, j) => (
+                    <th
+                      key={c}
+                      scope="col"
+                      className="px-2 py-2 align-bottom font-semibold text-ink @md:px-3 @md:whitespace-nowrap"
+                      style={j === visual.highlight ? { color: `var(--${accent})` } : undefined}
+                    >
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visual.cells.map((r, i) => (
+                  <tr
+                    // biome-ignore lint/suspicious/noArrayIndexKey: rows are positional and may repeat
+                    key={i}
+                    className="build border-line border-b last:border-0"
+                    style={order(i + 2)}
                   >
-                    {c}
-                  </th>
+                    {r.map((cell, j) => (
+                      <td
+                        // biome-ignore lint/suspicious/noArrayIndexKey: one cell per column, fixed order
+                        key={j}
+                        className="px-2 py-1.5 font-mono text-ink @md:px-3"
+                        style={
+                          j === visual.highlight
+                            ? { background: tint(accent, 9), fontWeight: 700 }
+                            : undefined
+                        }
+                      >
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visual.cells.map((r, i) => (
-                <tr
-                  // biome-ignore lint/suspicious/noArrayIndexKey: rows are positional and may repeat
-                  key={i}
-                  className="build border-line border-b last:border-0"
-                  style={order(i + 2)}
-                >
-                  {r.map((cell, j) => (
-                    <td
-                      // biome-ignore lint/suspicious/noArrayIndexKey: one cell per column, fixed order
-                      key={j}
-                      className="px-3 py-1.5 font-mono text-ink"
-                      style={
-                        j === visual.highlight
-                          ? { background: tint(accent, 9), fontWeight: 700 }
-                          : undefined
-                      }
-                    >
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-            {visual.totals && (
-              <tfoot>
-                <tr
-                  className="build border-line-2 border-t-2 bg-surface-2"
-                  style={order(visual.cells.length + 2)}
-                >
-                  {visual.totals.map((cell, j) => (
-                    <td
-                      // biome-ignore lint/suspicious/noArrayIndexKey: one cell per column, fixed order
-                      key={j}
-                      className="px-3 py-2 font-mono font-bold text-ink"
-                    >
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              </tfoot>
-            )}
-          </table>
+              </tbody>
+              {visual.totals && (
+                <tfoot>
+                  <tr
+                    className="build border-line-2 border-t-2 bg-surface-2"
+                    style={order(visual.cells.length + 2)}
+                  >
+                    {visual.totals.map((cell, j) => (
+                      <td
+                        // biome-ignore lint/suspicious/noArrayIndexKey: one cell per column, fixed order
+                        key={j}
+                        className="px-2 py-2 font-mono font-bold text-ink @md:px-3"
+                      >
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+          {chart && <TableBars chart={chart} accent={accent} from={visual.cells.length + 3} />}
         </div>
       );
+    }
     case 'chat':
       return (
         <ul className="grid gap-2.5">

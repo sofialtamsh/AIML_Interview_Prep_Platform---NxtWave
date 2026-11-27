@@ -152,7 +152,7 @@ export function StoryCard({
             title={`Step ${i + 1}: ${st.title}`}
             aria-label={`Go to step ${i + 1}: ${st.title}`}
             aria-current={i === step ? 'step' : undefined}
-            className="group min-w-0 flex-1 py-1.5"
+            className="group min-w-0 flex-1 py-1.5 pointer-coarse:py-3"
           >
             <span
               className={cn(
@@ -181,7 +181,7 @@ export function StoryCard({
           type="button"
           onClick={() => onStep(step - 1)}
           disabled={step === 0}
-          className="rounded-lg border border-line-2 bg-surface px-3 py-1.5 text-[13px] font-semibold text-ink disabled:opacity-40"
+          className="rounded-lg border border-line-2 bg-surface px-3 py-1.5 text-[13px] font-semibold text-ink disabled:opacity-40 pointer-coarse:py-2.5"
         >
           Back
         </button>
@@ -189,7 +189,7 @@ export function StoryCard({
           <button
             type="button"
             onClick={advance.go}
-            className="inline-flex min-w-[8.5rem] items-center justify-center gap-1.5 rounded-lg border border-ink bg-ink px-3 py-1.5 text-[13px] font-semibold text-surface"
+            className="inline-flex min-w-[8.5rem] items-center justify-center gap-1.5 rounded-lg border border-ink bg-ink px-3 py-1.5 text-[13px] font-semibold text-surface pointer-coarse:py-2.5"
           >
             Continue <ArrowRight className="size-3.5" aria-hidden />
           </button>
@@ -198,7 +198,7 @@ export function StoryCard({
             type="button"
             onClick={() => onStep(step + 1)}
             disabled={free}
-            className="min-w-[8.5rem] rounded-lg border border-brand bg-brand px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-40"
+            className="min-w-[8.5rem] rounded-lg border border-brand bg-brand px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-40 pointer-coarse:py-2.5"
           >
             {free
               ? 'Walkthrough done'
@@ -595,7 +595,7 @@ export function PickRow<T extends string>({
               aria-pressed={o === value}
               onClick={() => onChange(o)}
               className={cn(
-                'rounded-lg border px-2.5 py-1 text-[12.5px] font-semibold transition-colors',
+                'rounded-lg border px-2.5 py-1 text-[12.5px] font-semibold transition-colors pointer-coarse:px-3 pointer-coarse:py-2',
                 o === value
                   ? 'border-brand bg-brand text-white'
                   : 'border-line-2 bg-surface text-ink hover:border-brand',
@@ -634,7 +634,7 @@ export function PanelTabs<K extends string>({
           aria-selected={o === value}
           onClick={() => onChange(o)}
           className={cn(
-            'rounded-lg border px-2.5 py-1 text-[12.5px] font-semibold transition-colors',
+            'rounded-lg border px-2.5 py-1 text-[12.5px] font-semibold transition-colors pointer-coarse:px-3 pointer-coarse:py-2',
             o === value
               ? 'border-ink bg-ink text-surface'
               : 'border-line-2 bg-surface text-ink hover:border-ink-2',

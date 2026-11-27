@@ -422,6 +422,9 @@ export const LINEAR_REGRESSION_LESSON: LessonDocumentInput = {
             kicker: 'Which one',
             title: 'MSE, RMSE and MAE',
             body: 'The same residuals, three different jobs.',
+            animation: {
+              name: 'mse-rmse-mae',
+            },
             visual: {
               type: 'icons',
               items: [
@@ -457,6 +460,9 @@ export const LINEAR_REGRESSION_LESSON: LessonDocumentInput = {
             kicker: 'R squared',
             title: 'Variance explained',
             body: '**R²** scores your line against always predicting the mean salary, 10. **SSE** is the sum of squared residuals, 4. **SST** is that sum around the mean: 16 + 16 + 1 + 1 + 4 + 36 = 74. One minus their ratio is R².',
+            animation: {
+              name: 'r-squared-gaps',
+            },
             visual: { type: 'stat', value: '0.946', label: 'R² = 1 − 4 / 74' },
             note: 'R² is 1 for a perfect fit and 0 for "no better than the mean". Negative is worse: a bad line, or a fit judged on new data.',
           },
@@ -653,6 +659,9 @@ export const LINEAR_REGRESSION_LESSON: LessonDocumentInput = {
             kicker: 'Coefficients',
             title: 'Interpreting a coefficient',
             body: 'Read each weight with the other features held constant. One more year adds 1.625 LPA at the same number of projects. One more project adds 0.525 LPA at the same experience.',
+            animation: {
+              name: 'coefficient-held-fixed',
+            },
             visual: {
               type: 'icons',
               items: [
@@ -675,6 +684,11 @@ export const LINEAR_REGRESSION_LESSON: LessonDocumentInput = {
             kicker: 'Metric',
             title: 'Adjusted R squared',
             body: 'R² never falls when a feature is added, even a useless one. **Adjusted R²** corrects for that: **1 − (1 − R²)(n − 1) / (n − p − 1)**, with n rows and p features. It rises only when a new feature helps enough.',
+            animation: {
+              name: 'adjusted-r2-penalty',
+              caption:
+                'Projects lift R squared a little; the charge for a second feature costs more',
+            },
             visual: {
               type: 'table',
               columns: ['Model', 'R²', 'Adjusted R²'],
@@ -690,6 +704,9 @@ export const LINEAR_REGRESSION_LESSON: LessonDocumentInput = {
             kicker: 'Pitfall',
             title: 'Multicollinearity and VIF',
             body: '**Multicollinearity** means two features are highly correlated, so the model cannot separate their effects, and the weights become unstable. The **variance inflation factor** measures it: VIF = 1 / (1 − R²), from predicting one feature with the others.',
+            animation: {
+              name: 'collinear-weights',
+            },
             visual: {
               type: 'table',
               columns: ['Feature pair', 'Correlation', 'VIF'],
@@ -806,6 +823,11 @@ export const LINEAR_REGRESSION_LESSON: LessonDocumentInput = {
             kicker: 'Features',
             title: 'Polynomial features',
             body: 'The powers are built first, as ordinary columns. Then the usual fit runs on those columns. Degree 3 turns one feature into three.',
+            animation: {
+              name: 'polynomial-columns',
+              caption:
+                'x, x squared and x cubed as three columns: a straight-line fit on them bends',
+            },
             visual: {
               type: 'table',
               columns: ['x', 'x²', 'x³'],
@@ -859,6 +881,9 @@ export const LINEAR_REGRESSION_LESSON: LessonDocumentInput = {
             kicker: 'In practice',
             title: 'Choosing the degree',
             body: 'Never choose the degree on the training data: the highest degree always wins there.',
+            animation: {
+              name: 'degree-cross-validation',
+            },
             visual: {
               type: 'flow',
               steps: [
@@ -1125,11 +1150,17 @@ export const LINEAR_REGRESSION_LESSON: LessonDocumentInput = {
             kicker: 'Categories',
             title: 'Dummy variables',
             body: 'A linear model needs numbers. A column such as city becomes **dummy variables**: one 0-or-1 column per city. Leave one city out. With all of them in, the columns sum to 1 in every row, exactly like the intercept. That is the **dummy variable trap**: perfect multicollinearity.',
+            animation: {
+              name: 'dummy-columns',
+            },
             note: 'With Chennai left out, Hyderabad is (1, 0) and Pune is (0, 1). Each weight is then the gap from Chennai. In pandas: `pd.get_dummies(df, drop_first=True)`.',
           },
           {
             kicker: 'Compare',
             title: 'When a line fits',
+            animation: {
+              name: 'residual-patterns',
+            },
             visual: {
               type: 'compare',
               left: {
@@ -1144,7 +1175,7 @@ export const LINEAR_REGRESSION_LESSON: LessonDocumentInput = {
               right: {
                 title: 'A line struggles here',
                 items: [
-                  'The scatter bends: y climbs fast, then flattens',
+                  'The scatter bends: y climbs slowly, then fast',
                   'The spread widens as the prediction grows',
                   'One feature’s effect depends on another',
                   'A few extreme points pull the line towards them',
@@ -1551,11 +1582,6 @@ export const LINEAR_REGRESSION_LESSON: LessonDocumentInput = {
             title: 'What it is',
             front: 'What is linear regression?',
             back: 'Linear regression is a supervised learning algorithm. We use it to predict a continuous value, like a salary or a price.\n\nIt finds the best-fit straight line between the input and the output. The equation is **y = mx + b**, where m is the slope and b is the intercept.\n\nFor example, I can plot years of experience against salary. The model draws the line that stays closest to all the points. For a new person with 7 years of experience, I read the salary from that line.\n\n"Best fit" means the line with the smallest sum of squared errors between the actual and the predicted values.',
-          },
-          {
-            title: 'Regression or classification',
-            front: 'What is the difference between regression and classification?',
-            back: 'Both are supervised learning. The difference is in the output.\n\nIn regression the output is a continuous number. For example, predicting a house price or a salary.\n\nIn classification the output is a category. For example, spam or not spam, pass or fail.\n\nThe evaluation is different too. For regression we use MSE, RMSE, MAE and R squared. For classification we use accuracy, precision, recall and F1 score.\n\nA simple way to decide: if the question is "how much", it is regression. If the question is "which class", it is classification.',
           },
           {
             title: 'The loss function',

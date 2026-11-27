@@ -37,6 +37,10 @@ Classical ML track; the order puts the most-asked algorithms first.
 | 10 | Hierarchical clustering and DBSCAN | Hierarchical, DBSCAN | Coming soon |
 | 11 | PCA and dimensionality reduction | Dimensionality Reduction 1–3 | Coming soon |
 
+**No forward references.** A unit never compares with, or relies on, an algorithm taught in a later
+unit. Comparisons that interviewers ask (KNN vs K-Means, KNN vs SVM, KNN vs Random Forest,
+regression vs classification) are taught in the later unit of the pair, once both are known.
+
 **Phase B, after the algorithms:** the cross-cutting ML topics from the same track, rebuilt to the
 same pattern: evaluation metrics (by far the most-asked ML theme in interviews), bias and variance,
 regularisation, gradient descent, hyperparameter tuning and cross-validation. Lessons for some of
@@ -73,11 +77,11 @@ Every algorithm unit has the same parts, in this order. A unit takes a student 4
 | 3. How to describe it | The definitions and labels an interviewer expects, costs, and the regression form | Supervised, lazy, non-parametric; cost N × d; KNN regression |
 | 4. Guided lab: the main setting | The key hyperparameter, with accuracy on held-out points, so overfitting and underfitting are measured, not asserted | K = 1 scores 100% on training points and 84.4% on unseen ones; a large K fails on rings; choosing K; ties |
 | 5. Guided lab: the important variant | The fix for the basic method's weakness, computed by hand | Weighted votes (1 / distance), probabilities, an exact match |
-| 6. Where it breaks | Limits, with real-data code and its output | Scaling (72% to 94% on the Wine data), cross-validated K, the curse of dimensionality, KNN vs K-Means |
+| 6. Where it breaks | Limits, with real-data code and its output | Scaling (72% to 94% on the Wine data), cross-validated K, the curse of dimensionality, where KNN earns its place |
 | 7. Sandbox | Everything open: datasets, settings, the student's own points | Four patterns, three metrics, both votes, add points |
 | 8. Coding exercise | Fill in the blanks of a from-scratch version; checked on its results | `knn_predict` in NumPy: distances, the K nearest, the vote |
-| 9. Quiz | Five or six items, most needing a calculation | Votes, weights, K = 1, scaling, KNN vs K-Means |
-| 10. Interview playbook and cards | The main question as a timed answer, then about ten asked questions with model answers | "Explain KNN in detail" and ten cards, including "why KNN and not Random Forest" |
+| 9. Quiz | Five or six items, most needing a calculation | Votes, weights, K = 1, scaling, cost per prediction |
+| 10. Interview playbook and cards | The main question as a timed answer, then about ten asked questions with model answers | "Explain KNN in detail" and its cards, including "why KNN in your project" |
 | 11. Summary | Six takeaways and three things to remember | |
 
 Three rules the product owner added on 2026-11-20, after reading the linear regression unit:

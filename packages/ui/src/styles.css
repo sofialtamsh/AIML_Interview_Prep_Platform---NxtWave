@@ -58,7 +58,7 @@
   --surface-3: #e9eef6;
   --ink: #0b1526;
   --ink-2: #3b4a62;
-  --muted: #6a778e;
+  --muted: #65728a;
   --line: #e2e7ef;
   --line-2: #ccd5e2;
   --brand: #1f5bff;
@@ -142,6 +142,10 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    /* Keep the scrollbar's room even when the page does not scroll. Otherwise a page that grows a
+       few pixels past the window gains a scrollbar, gets narrower and re-wraps; a slide deck that
+       fits itself to the window then shrinks, loses the scrollbar, widens, and starts again. */
+    scrollbar-gutter: stable;
   }
   body {
     margin: 0;

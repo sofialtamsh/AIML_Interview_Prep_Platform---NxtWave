@@ -85,7 +85,7 @@ export function IdeAction({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-medium text-[#8a9bb5] transition-colors hover:bg-[#1a2436] hover:text-[#e6edf3] disabled:pointer-events-none disabled:opacity-40"
+      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-medium text-[#8a9bb5] transition-colors hover:bg-[#1a2436] hover:text-[#e6edf3] disabled:pointer-events-none disabled:opacity-40 pointer-coarse:px-2.5 pointer-coarse:py-2.5 pointer-coarse:text-[12.5px]"
     >
       {children}
     </button>

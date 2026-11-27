@@ -4,11 +4,17 @@
 #
 # Every value marked `sync: false` is asked for once, in the Render dashboard, when the blueprint
 # is created. Secrets are never written in this file.
+#
+# FREE PLAN for now (docs/13-deployment.md, "Free plan"): the server sleeps after 15 minutes
+# without visitors, the free database expires 30 days after it is created, and free servers have
+# no Shell and no pre-deploy step. To move to paid later: set `plan: starter` (web) and
+# `plan: basic-256mb` (database), move the migration back to `preDeployCommand`, and set
+# SMTP_PORT to 587. Upgrading the database in the dashboard keeps its data.
 
 databases:
   - name: nxtwave-prep-db
     databaseName: prep
-    plan: basic-256mb
+    plan: free
     region: singapore
     postgresMajorVersion: "17"
 
@@ -16,15 +22,15 @@ services:
   - type: web
     name: nxtwave-prep-api
     runtime: node
-    plan: starter
+    plan: free
     region: singapore
     # Dev dependencies (Prisma, the bundler) are needed to build, so --prod=false.
     buildCommand: >-
       npx --yes pnpm@11.20.0 install --frozen-lockfile --prod=false --filter @app/api... &&
       npx --yes pnpm@11.20.0 --filter @app/api build
-    # Database migrations run before each new version goes live.
-    preDeployCommand: cd apps/api && npx prisma migrate deploy
-    startCommand: node apps/api/dist/main.js
+    # Free servers have no pre-deploy step, so database migrations run each time the server starts
+    # (a second or two when there is nothing new).
+    startCommand: (cd apps/api && npx prisma migrate deploy) && node apps/api/dist/main.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -52,11 +58,12 @@ services:
         sync: false
       - key: APP_NAME
         value: NxtWave Prep
-      # Email through Brevo's SMTP relay (docs/13-deployment.md, step 6).
+      # Email through Brevo's SMTP relay (docs/13-deployment.md, step 6). Free Render servers
+      # block ports 465 and 587, so this uses Brevo's other port, 2525.
       - key: SMTP_HOST
         value: smtp-relay.brevo.com
       - key: SMTP_PORT
-        value: "587"
+        value: "2525"
       - key: SMTP_SECURE
         value: "false"
       - key: SMTP_USER

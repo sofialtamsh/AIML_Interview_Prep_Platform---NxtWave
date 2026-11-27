@@ -22,11 +22,94 @@
 | Pilot v2.11 · Interview-quality pass on all lessons, DSA + ML Fundamentals lessons, interactive explorers | ✅ Done | 2026-11-18 |
 | Pilot v2.12 · Pre-publish review and publishing of all lessons; Data Preparation module (4 units, 4 new explorers) | ✅ Done | 2026-11-18 |
 | Pilot v2.13 · Python & NumPy for AI module (3 units, 5 new explorers, 15 animations), reviewed and published | ✅ Done | 2026-11-18 |
+| Pilot v2.19 · Slide decks on the full page (like the labs), phone layout pass, larger touch targets | ✅ Done | 2026-11-27 |
 | 5 · Question bank and practice | Planned | – |
 | 6 · Research and curriculum agents | Planned | – |
 | 7 · Video and system design case studies | Planned | – |
 | 8 · Analytics and admin dashboards | Planned | – |
 | 9 · Hardening and deployment | Planned | – |
+
+---
+
+## Pilot v2.19 report: slide decks on the full page, and a phone pass (2026-11-27)
+
+**Why.** The manager's review: a slide deck sat in a narrow box in the middle of the page with its
+own row of controls, while a lab used the whole page. Decks should look like labs, with the one
+"next" button in the step bar, and the lessons must work on a phone.
+
+**What changed (the player only; no lesson content, so nothing to publish).**
+- `packages/learning-ui/src/sections/slides.tsx`: a deck is now laid out on the page, not in a box.
+  What a slide says (headline, paragraph, points) is one card on the left with "Slide 2 of 7 ·
+  Kicker" and the progress bars at its top; what it shows (moving picture, code, table, try-it) and
+  its note take the rest of the width. Under 56rem of deck width it is one column in reading order.
+  The deck's own controls row, its full-screen button and the "More" cue are gone: the lesson's
+  step bar turns the slides. Where there is no bar (admin preview), the card draws its own previous
+  and next. Play and read-aloud show only where narration is on.
+- `wantsWideStage` is true for `SLIDES`, so a deck gets the 1600px container and a one-line header.
+- `AnimationView` takes its height cap from the host (`--fig-h`), so pictures use the room.
+- Phone: tables tighten and wrap their headings so four columns fit; icon cards one to a row put
+  the icon beside the words; the slide-in movement is clipped inside the deck (it widened the page
+  and pushed the step bar off screen); `pointer-coarse:` variants enlarge the small controls
+  (walkthrough bars and buttons, quiz dots, editor actions, option pickers).
+- `--muted` is #65728a (was #6a778e): small labels now pass 4.5:1 on the page background.
+
+**Checked.** Every slide of the three live units at 1366x650 and 390x844, a deck at 1920x950,
+1024x700 and 768x1024, every step of the three units at 390x844 (no step wider than the screen,
+step bar always on screen, no console errors), and the admin preview. Lint and typecheck clean;
+292 learning-ui and 37 content tests pass; both apps build.
+
+**Design tooling.** The Impeccable skill is installed for Claude Code at user level
+(`~/.claude/skills/impeccable`). Its detector over `packages/learning-ui`, `packages/ui` and
+`apps/student` reported two items: the bouncing typing dots (now a pulse) and a bracket in a
+diagram that it mistook for a card accent (left as is).
+
+**Second pass, same day: slides fill the room.** The user's follow-up: on a large window the lower
+half of most slides was empty.
+- **Thin slides are enlarged** (`fitSlide` in `slides.tsx`): what a slide says and shows is zoomed
+  until it fills the height the window leaves the step, up to 1.6 times in a laptop window and up
+  to twice on a tall one. It comes back down until nothing is taller than the room and no code
+  line or table needs sideways scrolling. Full slides, phones and hosts that give no room
+  (`--lesson-room` absent: the admin preview) are left alone. The card's header is not zoomed.
+- **Pictures take the room's height** (the 27rem cap on `--fig-h` is gone).
+- **A number table draws itself** (`table-chart.ts`, `TableBars`): where the highlighted column is
+  all numbers (3 to 7 rows), it is drawn under the table as bars from a zero line, or as one bar
+  split into parts when the rows add up to the table's total. Derived from the table at render
+  time, so no lesson changed. In two columns it shows only where it fits the room.
+- A four-step flow needs 48rem before it lays out as a row (it was cramped on an enlarged slide).
+- **Measured on the 70 slides of the three live units:** at 1366x650, 65 fill 80% or more of the
+  room and none less than 65%; at 1536x730, 52 and none; at 1920x950, 37 fill 80% or more, 20 fill
+  65 to 79% and 13 fill 53 to 64%. No sideways overflow at any size, phone included. 299
+  learning-ui tests pass.
+
+**Third pass, same day: pictures instead of big type.** The user saw a slide enlarged 2× and asked
+whether it looked good and whether Impeccable's rules were applied. They were not: its reading rule
+is body text near 16px. So:
+- Enlarging is capped at **1.25×** (body text 20px at most).
+- **26 new moving pictures**, drawn from each unit's own numbers by three parallel agents and
+  checked against the lab code: 9 for linear regression (`anim/linreg.tsx`), 13 for logistic
+  regression (`anim/logreg.tsx`), 4 for KNN (`anim/knn.tsx`). Descriptions in
+  `@app/content` `animations-<unit>.ts`. Helpers moved to `anim-kit.tsx`.
+- A picture takes the height its column has left (`fitSlide` sets `--fig-h`), and sits **beside**
+  cards, a comparison, a flow or a short table (`data-pair`, from a 36rem figure column), so on a
+  1366×650 window its smallest text is about 10.5px instead of 6–8px.
+- Fitting settles: layout sizes (not screen boxes, which the entrance animation scales), card
+  columns counted from the unenlarged width, `scrollbar-gutter: stable` on the page, and a slide
+  that keeps re-fitting stops being enlarged.
+- Captions that only repeated the picture's own title were dropped, so every deck stays inside its
+  reading budget.
+- **Forward references removed** from the live units (the user: comparisons wait for the later
+  unit): KNN lost the K-Means slide, quiz item and cards, the SVM card, PCA and "tree ensemble";
+  "why not Random Forest" became "why KNN in your project"; "regression vs classification" moved
+  from linear to logistic regression; "sigmoid in neural networks" was cut. The 27 archived
+  lessons were audited: `docs/14-forward-reference-audit.md`.
+- `log-loss-curve` marked p = 0.1 (2.303), the mirror of the deck's try-it answer; it now marks
+  p = 0.2 (1.609).
+- The three lessons are **In review** (linear regression v7, logistic regression v3, KNN v3); the
+  published versions are unchanged until the user publishes.
+
+**Open.** Try-it slides have no picture on purpose (it could give the answer away). Two optional
+slides per unit were skipped where a picture would only repeat another. The coding exercise, quiz
+and interview Q&A steps still use the reading column.
 
 ---
 
